@@ -7,6 +7,7 @@
     android:padding="16dp">
 
     <TextView
+        android:id="@+id/textLogo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Hit &amp; Blow"
@@ -26,5 +27,15 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="4桁モードで開始" />
+
+    <Button
+        android:id="@+id/buttonStartCardMode"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="CARD BATTLE MODE"
+        android:backgroundTint="#E91E63"
+        android:visibility="gone" />
+
 
 </LinearLayout>

@@ -8,16 +8,27 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class GamePhase { SETTING_P1, SETTING_P2, PLAYING, FINISHED }
 enum class Player { P1, P2 }
+enum class CardType(val title: String, val description: String) {
+    ATTACK_UP("攻撃強化", "次のダメージ2倍"),
+    DEFENSE_UP("防御強化", "自傷ダメージ無効"),
+    HEAL("回復", "HPを20回復")
+}
 
 class GameViewModel : ViewModel() {
-    // 1. Calculatorは「判定するだけ」の道具として持つ
     private val calculator = HitBlowCalculator()
     private var digitCount = 3
 
-    fun setDigitCount(count: Int) {
-        digitCount = count
-    }
+    // カードモードかどうかを保持
+    private var isCardMode = false
 
+    // --- カードモード用ステータス ---
+    private val _p1Hp = MutableStateFlow(100)
+    val p1Hp = _p1Hp.asStateFlow()
+
+    private val _p2Hp = MutableStateFlow(100)
+    val p2Hp = _p2Hp.asStateFlow()
+
+    // --- 既存の状態 ---
     private val _phase = MutableStateFlow(GamePhase.SETTING_P1)
     val phase = _phase.asStateFlow()
 
@@ -33,12 +44,34 @@ class GameViewModel : ViewModel() {
     private val _winner = MutableStateFlow<Player?>(null)
     val winner = _winner.asStateFlow()
 
-    // 2. 正解データはViewModelが責任を持って保持する
-    private var p1Answer: String = "" // P2が当てる数字
-    private var p2Answer: String = "" // P1が当てる数字
+    private var p1Answer: String = ""
+    private var p2Answer: String = ""
+
+    private val _currentRound = MutableStateFlow(1)
+    val currentRound = _currentRound.asStateFlow()
+
+    private val _availableCards = MutableStateFlow<List<CardType>>(emptyList())
+    val availableCards = _availableCards.asStateFlow()
+
+    private var turnCount = 0
+    private var turnCounter = 0
+
+    private var p1NextBuff: CardType? = null
+    private var p2NextBuff: CardType? = null
+
+    private var p1AttackMultiplier = 1
+    private var p2AttackMultiplier = 1
+    private var p1IsInvincible = false
+    private var p2IsInvincible = false
+
+    fun setDigitCount(count: Int) { digitCount = count }
+
+    // MainActivityから渡されるフラグをセット
+    fun setCardMode(enabled: Boolean) {
+        isCardMode = enabled
+    }
 
     fun onInputSubmitted(input: String) {
-        // 基本バリデーション：桁数不足や重複をここで弾く
         if (input.length != digitCount || input.toSet().size != digitCount) return
 
         when (_phase.value) {
@@ -51,35 +84,137 @@ class GameViewModel : ViewModel() {
                 _phase.value = GamePhase.PLAYING
                 _currentPlayer.value = Player.P1
             }
-            GamePhase.PLAYING -> {
-                processGuess(input)
-            }
-            GamePhase.FINISHED -> { /* 何もしない */ }
+            GamePhase.PLAYING -> processGuess(input)
+            else -> {}
         }
     }
 
+    // --- processGuess 関数を以下に丸ごと差し替え ---
     private fun processGuess(input: String) {
         val current = _currentPlayer.value
-        // 攻撃側がP1なら、標的はP2が設定した数字
         val target = if (current == Player.P1) p2Answer else p1Answer
-
-        // 3. Calculatorには「引数」として渡す。Calculator内の変数は参照しない。
         val result = calculator.judge(target, input)
 
+        // ログの記録
         val newGuess = Guess(current.name, input, result.hit, result.blow)
+        if (current == Player.P1) _p1Logs.value += newGuess else _p2Logs.value += newGuess
 
-        // ログ更新
-        if (current == Player.P1) {
-            _p1Logs.value = _p1Logs.value + newGuess
-        } else {
-            _p2Logs.value = _p2Logs.value + newGuess
-        }
+        if (isCardMode) {
+            // 1. ダメージ計算
+            calculateCardModeDamage(input, result.hit, result.blow, current)
 
-        if (result.hit == digitCount) {
-            _winner.value = current
-            _phase.value = GamePhase.FINISHED
+            // 2. 3ヒット（正解）した場合の処理
+            if (result.hit == digitCount) {
+                if (_winner.value == null) {
+                    // ここでバフカードを配る（ボーナスタイム）
+                    prepareNextRoundCards()
+
+                    // 【重要】ターゲット（数字）をリセットするため、設定フェーズに戻す
+                    // 正解されたプレイヤー（ターゲット側）が数字を決め直す
+                    // 例：P1が当てたなら、次はP2が新しい数字を決める
+                    _phase.value = if (current == Player.P1) GamePhase.SETTING_P2 else GamePhase.SETTING_P1
+
+                    // ログも一旦クリアして、新しいラウンドをスッキリさせる（お好みで）
+                    // _p1Logs.value = emptyList()
+                    // _p2Logs.value = emptyList()
+
+                    return // フェーズが変わるのでここで処理終了
+                }
+            }
+
+            // 3. 決着チェック
+            if (_winner.value != null) {
+                _phase.value = GamePhase.FINISHED
+            } else {
+                // 交代
+                _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
+            }
         } else {
-            _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
+            // 通常モード（3ヒットで即終了）
+            if (result.hit == digitCount) {
+                _winner.value = current
+                _phase.value = GamePhase.FINISHED
+            } else {
+                _currentPlayer.value = if (current == Player.P1) Player.P2 else Player.P1
+            }
         }
     }
+
+    // カードバトルの特殊ルール
+    private fun calculateCardModeDamage(guess: String, hit: Int, blow: Int, current: Player) {
+        val myAnswer = if (current == Player.P1) p1Answer else p2Answer
+
+        // 1. 【自傷ダメージ】
+        if (hit == 0 && blow == 0) {
+            val isInvincible = if (current == Player.P1) p1IsInvincible else p2IsInvincible
+            if (!isInvincible) {
+                val selfDamage = myAnswer.map { it.digitToInt() }.sum()
+                if (current == Player.P1) _p1Hp.value = (p1Hp.value - selfDamage).coerceAtMost(100)
+                else _p2Hp.value = (p2Hp.value - selfDamage).coerceAtMost(100)
+            }
+            // 効果を使ったらリセット
+            if (current == Player.P1) p1IsInvincible = false else p2IsInvincible = false
+        }
+
+        // 2. 【攻撃ダメージ】
+        if (hit == digitCount) {
+            val multiplier = if (current == Player.P1) p1AttackMultiplier else p2AttackMultiplier
+            val attackDamage = guess.map { it.digitToInt() }.sum() * multiplier
+
+            if (current == Player.P1) _p2Hp.value = (p2Hp.value - attackDamage).coerceAtMost(100)
+            else _p1Hp.value = (p1Hp.value - attackDamage).coerceAtMost(100)
+
+            // 効果を使ったらリセット
+            if (current == Player.P1) p1AttackMultiplier = 1 else p2AttackMultiplier = 1
+        }
+
+        // 死亡チェック
+        if (_p1Hp.value <= 0) _winner.value = Player.P2
+        if (_p2Hp.value <= 0) _winner.value = Player.P1
+    }
+    // processGuess の最後の方、ターン交代の直前に追加
+    private fun checkRoundProgress() {
+        turnCount++
+        if (turnCount >= 6) { // 両者3回ずつ（計6回）で1ラウンド終了
+            turnCount = 0
+            _currentRound.value += 1
+            prepareNextRoundCards()
+        }
+    }
+
+    private fun prepareNextRoundCards() {
+        // 確実にデータを流すために、一度空にしてからセット
+        _availableCards.value = emptyList()
+        val newCards = CardType.values().toList().shuffled().take(3)
+        _availableCards.value = newCards
+    }
+
+    // カードを選んだ時の処理
+    fun onCardSelected(player: Player, card: CardType) {
+        when (card) {
+            CardType.ATTACK_UP -> {
+                if (player == Player.P1) p1AttackMultiplier = 2 else p2AttackMultiplier = 2
+            }
+            CardType.DEFENSE_UP -> {
+                if (player == Player.P1) p1IsInvincible = true else p2IsInvincible = true
+            }
+            CardType.HEAL -> {
+                if (player == Player.P1) _p1Hp.value = (p1Hp.value + 20).coerceAtMost(100)
+                else _p2Hp.value = (p2Hp.value + 20).coerceAtMost(100)
+            }
+        }
+        // カードを配り終えたらリストを空にしてUIを閉じる
+        _availableCards.value = emptyList()
+    }
+
+    private fun updateRound() {
+        turnCounter++
+        // P1とP2が1回ずつ投げたら「1ターン消化」と数える場合
+        // 各プレイヤー3回ずつ（合計6回）でカード配布
+        if (turnCounter >= 6) {
+            turnCounter = 0 // リセット
+            prepareNextRoundCards()
+        }
+    }
+
 }

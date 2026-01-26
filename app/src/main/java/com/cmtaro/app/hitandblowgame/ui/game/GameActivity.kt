@@ -1,7 +1,8 @@
 package com.cmtaro.app.hitandblowgame.ui.game
 
+import android.graphics.Color
 import android.os.Bundle
-import android.widget.Button
+import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -11,154 +12,157 @@ import com.cmtaro.app.hitandblowgame.databinding.ActivityGameBinding
 import kotlinx.coroutines.launch
 
 class GameActivity : AppCompatActivity() {
+
     private lateinit var binding: ActivityGameBinding
     private val viewModel: GameViewModel by viewModels()
-    private var digitCount = 3
 
-    // 入力中の数字を保持する
+    private lateinit var p1Adapter: GuessLogAdapter
+    private lateinit var p2Adapter: GuessLogAdapter
+
     private var currentInputString = ""
-
-    private val p1Adapter = GuessLogAdapter()
-    private val p2Adapter = GuessLogAdapter()
+    private val digitCount = 3 // 必要に応じて変更可能
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityGameBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        digitCount = intent.getIntExtra("DIGIT_COUNT", 3)
+        // 初期設定
+        val isCardMode = intent.getBooleanExtra("CARD_MODE", false)
+        viewModel.setCardMode(isCardMode)
         viewModel.setDigitCount(digitCount)
 
-        // RecyclerView設定
-        setupRecyclerViews()
-
-        // テンキーの設定
-        setupNumericKeypad()
-
-        // 決定ボタンの設定
-        binding.buttonSubmit.setOnClickListener {
-            if (currentInputString.length == digitCount) {
-                viewModel.onInputSubmitted(currentInputString)
-                resetInputState() // 入力をクリアしてボタンを復活させる
-            } else {
-                Toast.makeText(this, "${digitCount}桁入力してください", Toast.LENGTH_SHORT).show()
-            }
+        if (isCardMode) {
+            binding.layoutHp.visibility = View.VISIBLE
         }
 
+        setupRecyclerViews()
+        setupNumericKeypad()
         setupObservers()
     }
 
     private fun setupRecyclerViews() {
+        p1Adapter = GuessLogAdapter()
+        p2Adapter = GuessLogAdapter()
         binding.recyclerP1Logs.apply {
-            adapter = p1Adapter
             layoutManager = LinearLayoutManager(this@GameActivity)
+            adapter = p1Adapter
         }
         binding.recyclerP2Logs.apply {
-            adapter = p2Adapter
             layoutManager = LinearLayoutManager(this@GameActivity)
+            adapter = p2Adapter
         }
     }
 
     private fun setupNumericKeypad() {
-        // 数字ボタンをリストにまとめる
-        val numberButtons = listOf(
+        val buttons = listOf(
             binding.btn0, binding.btn1, binding.btn2, binding.btn3, binding.btn4,
             binding.btn5, binding.btn6, binding.btn7, binding.btn8, binding.btn9
         )
 
-        numberButtons.forEach { button ->
+        buttons.forEach { button ->
             button.setOnClickListener {
-                val num = button.text.toString()
-
-                // 桁数上限まで、かつ重複していなければ追加
-                if (currentInputString.length < digitCount && !currentInputString.contains(num)) {
-                    currentInputString += num
-                    button.isEnabled = false // 同じ数字を2回押せないようにする
+                if (currentInputString.length < digitCount) {
+                    currentInputString += button.text
                     updateInputDisplay()
                 }
             }
         }
 
-        // 消去ボタンの処理
         binding.btnDelete.setOnClickListener {
             if (currentInputString.isNotEmpty()) {
-                val lastChar = currentInputString.last().toString()
                 currentInputString = currentInputString.dropLast(1)
+                updateInputDisplay()
+            }
+        }
 
-                // 消した数字のボタンを再び有効にする
-                numberButtons.find { it.text == lastChar }?.isEnabled = true
+        binding.buttonSubmit.setOnClickListener {
+            if (currentInputString.length == digitCount) {
+                viewModel.onInputSubmitted(currentInputString)
+                currentInputString = ""
                 updateInputDisplay()
             }
         }
     }
 
-    // 入力エリアの文字表示を更新
     private fun updateInputDisplay() {
-        binding.textCurrentInput.text = currentInputString.padEnd(digitCount, '-').chunked(1).joinToString(" ")
-
-    }
-
-    // 送信後にリセット
-    private fun resetInputState() {
-        currentInputString = ""
-        updateInputDisplay()
-
-        // 全ボタンを有効に戻す
-        listOf(
-            binding.btn0, binding.btn1, binding.btn2, binding.btn3, binding.btn4,
-            binding.btn5, binding.btn6, binding.btn7, binding.btn8, binding.btn9
-        ).forEach { it.isEnabled = true }
+        val phase = viewModel.phase.value
+        if (phase == GamePhase.SETTING_P1 || phase == GamePhase.SETTING_P2) {
+            // 設定フェーズは伏せ字
+            binding.textCurrentInput.text = "● ".repeat(currentInputString.length) +
+                    "- ".repeat(digitCount - currentInputString.length)
+        } else {
+            // プレイフェーズは数字表示
+            binding.textCurrentInput.text = currentInputString.padEnd(digitCount, '-').chunked(1).joinToString(" ")
+        }
     }
 
     private fun setupObservers() {
-        // フェーズ監視
+        // --- 1. フェーズとターンの総合監視 ---
         lifecycleScope.launch {
             viewModel.phase.collect { phase ->
+                updateInputDisplay()
                 when (phase) {
-                    GamePhase.SETTING_P1 -> binding.textInstruction.text = "プレイヤー1：${digitCount}桁の数字を決定"
-                    GamePhase.SETTING_P2 -> binding.textInstruction.text = "プレイヤー2：${digitCount}桁の数字を決定"
-                    GamePhase.PLAYING -> binding.textInstruction.text = "ゲーム開始！"
-                    GamePhase.FINISHED -> {
-                        binding.textInstruction.text = "ゲーム終了！"
-                        binding.buttonSubmit.isEnabled = false
-                    }
+                    GamePhase.SETTING_P1 -> binding.textInstruction.text = "P1: 秘密の番号をセット"
+                    GamePhase.SETTING_P2 -> binding.textInstruction.text = "P2: 秘密の番号をセット"
+                    GamePhase.PLAYING -> binding.textInstruction.text = "バトル中！相手の番号を当てろ"
+                    GamePhase.FINISHED -> binding.textInstruction.text = "GAME OVER"
                 }
-                updateInputDisplay() // フェーズが変わったら伏せ字/表示を切り替える
             }
         }
 
-        // ターン監視
         lifecycleScope.launch {
             viewModel.currentPlayer.collect { player ->
-                binding.textCurrentPlayer.text = "現在：${player.name} のターン"
-                if (player == Player.P1) {
-                    binding.recyclerP1Logs.alpha = 1.0f
-                    binding.recyclerP2Logs.alpha = 0.4f
+                val playerName = if (player == Player.P1) "P1" else "P2"
+                binding.textCurrentPlayer.text = "$playerName の番です"
+
+                // 視覚的なターン強調（アクティブなプレイヤー以外を薄くする）
+                binding.recyclerP1Logs.alpha = if (player == Player.P1) 1.0f else 0.3f
+                binding.recyclerP2Logs.alpha = if (player == Player.P2) 1.0f else 0.3f
+                binding.layoutP1Status.alpha = if (player == Player.P1) 1.0f else 0.3f
+                binding.layoutP2Status.alpha = if (player == Player.P2) 1.0f else 0.3f
+            }
+        }
+
+        // --- 2. カード選択画面の監視 ---
+        lifecycleScope.launch {
+            viewModel.availableCards.collect { cards ->
+                if (cards.isNotEmpty()) {
+                    binding.layoutCardSelection.visibility = View.VISIBLE
+                    binding.btnCard1.text = "${cards[0].title}\n${cards[0].description}"
+                    binding.btnCard2.text = "${cards[1].title}\n${cards[1].description}"
+                    binding.btnCard3.text = "${cards[2].title}\n${cards[2].description}"
+
+                    binding.btnCard1.setOnClickListener { viewModel.onCardSelected(viewModel.currentPlayer.value, cards[0]) }
+                    binding.btnCard2.setOnClickListener { viewModel.onCardSelected(viewModel.currentPlayer.value, cards[1]) }
+                    binding.btnCard3.setOnClickListener { viewModel.onCardSelected(viewModel.currentPlayer.value, cards[2]) }
                 } else {
-                    binding.recyclerP1Logs.alpha = 0.4f
-                    binding.recyclerP2Logs.alpha = 1.0f
+                    binding.layoutCardSelection.visibility = View.GONE
                 }
             }
         }
 
-        // ログ監視
-        lifecycleScope.launch { viewModel.p1Logs.collect { p1Adapter.submitList(it) } }
-        lifecycleScope.launch { viewModel.p2Logs.collect { p2Adapter.submitList(it) } }
-
-        // 勝利監視
+        // --- 3. HP・ログ・勝利監視 ---
         lifecycleScope.launch {
-            viewModel.winner.collect { winner ->
-                winner?.let { showWinDialog(it) }
+            viewModel.p1Hp.collect { hp ->
+                binding.progressP1Hp.progress = hp
+                binding.textP1Hp.text = "P1 HP: $hp"
             }
         }
-    }
-
-    private fun showWinDialog(winner: Player) {
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("ゲーム終了！")
-            .setMessage("勝者：${winner.name}\nおめでとうございます！")
-            .setPositiveButton("メニューに戻る") { _, _ -> finish() }
-            .setCancelable(false)
-            .show()
+        lifecycleScope.launch {
+            viewModel.p2Hp.collect { hp ->
+                binding.progressP2Hp.progress = hp
+                binding.textP2Hp.text = "P2 HP: $hp"
+            }
+        }
+        lifecycleScope.launch { viewModel.p1Logs.collect { p1Adapter.submitList(it) } }
+        lifecycleScope.launch { viewModel.p2Logs.collect { p2Adapter.submitList(it) } }
+        lifecycleScope.launch {
+            viewModel.winner.collect { winner ->
+                winner?.let {
+                    Toast.makeText(this@GameActivity, "${it.name} の勝利！", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 }
