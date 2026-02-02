@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 enum class GamePhase { 
     SETTING_P1, SETTING_P2, 
     PLAYING,
+    CARD_USE_P1, CARD_USE_P2,  // 手札カード使用フェーズ
     WAITING_P2_INPUT,  // P1入力完了、P2待ち
     REPLAYING,         // リプレイ中
     CARD_SELECT_P1, CARD_SELECT_P2, 
@@ -154,6 +155,10 @@ class GameViewModel : ViewModel() {
     private val _showCardSelectDialog = MutableStateFlow(false)
     val showCardSelectDialog = _showCardSelectDialog.asStateFlow()
 
+    // 手札カード使用確認用
+    private val _showHandCardDialog = MutableStateFlow(false)
+    val showHandCardDialog = _showHandCardDialog.asStateFlow()
+
     fun setDigitCount(count: Int) { digitCount = count }
 
     // MainActivityから渡されるフラグをセット
@@ -174,6 +179,24 @@ class GameViewModel : ViewModel() {
         prepareRoundStartCards()
         updateStatusEffects() // ステータスを更新
         addBattleLog("🎮 ラウンド${_currentRound.value} 開始！")
+        
+        // ラウンド開始時に手札用カード（補助系）を3枚ずつ配布
+        distributeHandCards()
+    }
+    
+    // ラウンド開始時に手札カードを配布
+    private fun distributeHandCards() {
+        val supportCards = CardType.values().filter { it.category == CardCategory.SUPPORT }
+        
+        // P1に3枚配布
+        val p1NewCards = supportCards.shuffled().take(3)
+        _p1HandCards.value = _p1HandCards.value + p1NewCards
+        addBattleLog("🎴 P1 が手札カードを3枚獲得")
+        
+        // P2に3枚配布
+        val p2NewCards = supportCards.shuffled().take(3)
+        _p2HandCards.value = _p2HandCards.value + p2NewCards
+        addBattleLog("🎴 P2 が手札カードを3枚獲得")
     }
     
     // バトルログに追加
@@ -199,15 +222,21 @@ class GameViewModel : ViewModel() {
                 _currentPlayer.value = Player.P1
             }
             GamePhase.PLAYING -> {
-                // P1の入力
+                // P1の入力後、手札カード使用フェーズへ
                 p1CurrentInput = input
+                _phase.value = GamePhase.CARD_USE_P1
+                _currentPlayer.value = Player.P1
+            }
+            GamePhase.CARD_USE_P2 -> {
+                // P2のカード使用完了後、P2の数字入力へ
                 _phase.value = GamePhase.WAITING_P2_INPUT
                 _currentPlayer.value = Player.P2
             }
             GamePhase.WAITING_P2_INPUT -> {
-                // P2の入力完了 → リプレイ開始
+                // P2の入力後、手札カード使用フェーズへ
                 p2CurrentInput = input
-                startReplay()
+                _phase.value = GamePhase.CARD_USE_P2
+                _currentPlayer.value = Player.P2
             }
             else -> {}
         }
@@ -327,8 +356,15 @@ class GameViewModel : ViewModel() {
             // 3ヒット（正解）した場合の処理
             if (result.hit == digitCount) {
                 if (_winner.value == null) {
-                    // 補助系カードを獲得できる選択肢を提供
-                    prepareNextRoundCards()
+                    // ラウンド終了：次のラウンドへ
+                    _currentRound.value += 1
+                    addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value - 1} 終了")
+                    // 決着がついていなければ新ラウンド開始
+                    viewModelScope.launch {
+                        delay(1500)
+                        startNewRound()
+                    }
+                    return
                 }
             }
 
@@ -646,18 +682,24 @@ class GameViewModel : ViewModel() {
     
     // 補助系カードを使用する
     fun useHandCard(player: Player, card: CardType) {
+        val playerName = if (player == Player.P1) "P1" else "P2"
+        
         when (card) {
             CardType.COUNTER -> {
                 if (player == Player.P1) p1HasCounter = true else p2HasCounter = true
+                addBattleLog("🃏 $playerName カード使用: ${card.title} → 反撃準備")
             }
             CardType.INVINCIBLE -> {
                 if (player == Player.P1) p1IsInvincible = true else p2IsInvincible = true
+                addBattleLog("🃏 $playerName カード使用: ${card.title} → 無敵付与")
             }
             CardType.HIT_BONUS -> {
                 if (player == Player.P1) p1HitBonus = 5 else p2HitBonus = 5
+                addBattleLog("🃏 $playerName カード使用: ${card.title} → Hit×5")
             }
             CardType.BLOW_BONUS -> {
                 if (player == Player.P1) p1BlowBonus = 3 else p2BlowBonus = 3
+                addBattleLog("🃏 $playerName カード使用: ${card.title} → Blow×3")
             }
             CardType.STEAL_HP -> {
                 if (player == Player.P1) {
@@ -665,11 +707,13 @@ class GameViewModel : ViewModel() {
                     _p2Hp.value = (p2Hp.value - steal).coerceIn(0, 100)
                     _p1Hp.value = (p1Hp.value + steal).coerceIn(0, 100)
                     _lastDamageInfo.value = "P1がP2のHPを${steal}奪った！"
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP${steal}吸収")
                 } else {
                     val steal = 10.coerceAtMost(p1Hp.value)
                     _p1Hp.value = (p1Hp.value - steal).coerceIn(0, 100)
                     _p2Hp.value = (p2Hp.value + steal).coerceIn(0, 100)
                     _lastDamageInfo.value = "P2がP1のHPを${steal}奪った！"
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP${steal}吸収")
                 }
             }
             else -> {}
@@ -682,6 +726,18 @@ class GameViewModel : ViewModel() {
             _p2HandCards.value = _p2HandCards.value.filter { it != card }
         }
         updateStatusEffects() // ステータス更新
+        
+        // カード使用後、次のフェーズへ
+        when (_phase.value) {
+            GamePhase.CARD_USE_P1 -> {
+                _phase.value = GamePhase.WAITING_P2_INPUT
+                _currentPlayer.value = Player.P2
+            }
+            GamePhase.CARD_USE_P2 -> {
+                startReplay()
+            }
+            else -> {}
+        }
     }
     
     // ステータス効果を文字列化して表示用に更新
@@ -790,5 +846,32 @@ class GameViewModel : ViewModel() {
         }
         
         return "➖ $playerName → ダメージなし (${hit}H ${blow}B)"
+    }
+
+    // 手札カード使用のスキップ機能を追加
+    // 手札カード使用フェーズをスキップ（カードを使わない）
+    fun skipCardUse() {
+        when (_phase.value) {
+            GamePhase.CARD_USE_P1 -> {
+                // P1がスキップしたら、P2の数字入力フェーズへ
+                addBattleLog("⏭️ P1 カード使用をスキップ")
+                _phase.value = GamePhase.WAITING_P2_INPUT
+                _currentPlayer.value = Player.P2
+            }
+            GamePhase.CARD_USE_P2 -> {
+                // P2がスキップしたら、リプレイ開始
+                addBattleLog("⏭️ P2 カード使用をスキップ")
+                startReplay()
+            }
+            else -> {}
+        }
+    }
+    
+    fun confirmCardUsePhase() {
+        _showHandCardDialog.value = true
+    }
+    
+    fun dismissCardUseDialog() {
+        _showHandCardDialog.value = false
     }
 }

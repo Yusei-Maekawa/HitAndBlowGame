@@ -128,7 +128,9 @@ class GameActivity : AppCompatActivity() {
                     GamePhase.SETTING_P1 -> "P1: 数字セット"
                     GamePhase.SETTING_P2 -> "P2: 数字セット"
                     GamePhase.PLAYING -> if (isCardMode) "P1: 数字を入力" else "P1: 推測"
+                    GamePhase.CARD_USE_P1 -> "P1: 手札カードを使用できます"
                     GamePhase.WAITING_P2_INPUT -> if (isCardMode) "P2: 数字を入力" else "P2: 推測"
+                    GamePhase.CARD_USE_P2 -> "P2: 手札カードを使用できます"
                     GamePhase.REPLAYING -> "リプレイ中..."
                     GamePhase.FINISHED -> "試合終了"
                 }
@@ -139,11 +141,38 @@ class GameActivity : AppCompatActivity() {
                     GamePhase.PLAYING, GamePhase.WAITING_P2_INPUT
                 )
                 binding.layoutInput.visibility = if (showInput) View.VISIBLE else View.GONE
+                
+                // 手札カード使用フェーズの処理
+                if (isCardMode && (phase == GamePhase.CARD_USE_P1 || phase == GamePhase.CARD_USE_P2)) {
+                    showHandCardDialog(phase)
+                }
             }
         }
 
         // --- カードモード専用の監視 ---
         if (isCardMode) {
+            // 手札の監視（自分のターンのみ表示）
+            lifecycleScope.launch {
+                viewModel.currentPlayer.collect { player ->
+                    lifecycleScope.launch {
+                        viewModel.p1HandCards.collect { cards ->
+                            if (player == Player.P1 && cards.isNotEmpty()) {
+                                val cardText = "手札: ${cards.joinToString(", ") { it.title }}"
+                                binding.textDamageInfo.text = cardText
+                            }
+                        }
+                    }
+                    lifecycleScope.launch {
+                        viewModel.p2HandCards.collect { cards ->
+                            if (player == Player.P2 && cards.isNotEmpty()) {
+                                val cardText = "手札: ${cards.joinToString(", ") { it.title }}"
+                                binding.textDamageInfo.text = cardText
+                            }
+                        }
+                    }
+                }
+            }
+            
             // リプレイオーバーレイの監視
             lifecycleScope.launch {
                 viewModel.showReplayOverlay.collect { show ->
@@ -292,5 +321,40 @@ class GameActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+    
+    // 手札カード使用ダイアログを表示
+    private fun showHandCardDialog(phase: GamePhase) {
+        val player = if (phase == GamePhase.CARD_USE_P1) Player.P1 else Player.P2
+        val playerName = if (player == Player.P1) "P1" else "P2"
+        val handCards = if (player == Player.P1) 
+            viewModel.p1HandCards.value else viewModel.p2HandCards.value
+        
+        if (handCards.isEmpty()) {
+            // 手札がない場合は自動的にスキップ
+            viewModel.skipCardUse()
+            return
+        }
+        
+        val items = mutableListOf<String>()
+        items.add("【スキップ】カードを使わない")
+        handCards.forEachIndexed { index, card ->
+            items.add("${index + 1}. 【${card.title}】 - ${card.description}")
+        }
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("$playerName の手札カード\n※相手には見えません")
+            .setItems(items.toTypedArray()) { _, which ->
+                if (which == 0) {
+                    // スキップ選択
+                    viewModel.skipCardUse()
+                } else {
+                    // カード使用
+                    val selectedCard = handCards[which - 1]
+                    viewModel.useHandCard(player, selectedCard)
+                }
+            }
+            .setCancelable(false)
+            .show()
     }
 }
