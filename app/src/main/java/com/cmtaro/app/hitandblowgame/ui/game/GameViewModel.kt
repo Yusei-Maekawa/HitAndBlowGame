@@ -416,16 +416,19 @@ class GameViewModel : ViewModel() {
             } else {
                 // 【通常の攻撃】片方だけ正解
                 // 自分が設定した数字の合計がダメージになる
-                val baseAttack = myAnswer.map { it.digitToInt() }.sum()
+                val digits = myAnswer.map { it.digitToInt() }
+                val baseAttack = digits.sum()
                 var attackDamage = 0
+                
+                // 基礎ダメージの計算式を作成 (例: 2+3+4=9)
+                val baseDamageFormula = "${digits.joinToString("+")}=$baseAttack"
                 
                 // 攻撃バフを適用
                 if (current == Player.P1) {
                     attackDamage = ((baseAttack + p1AttackBonus) * p1AttackMultiplier).toInt()
                     val multiplierText = if (p1AttackMultiplier > 1.0) " ×${p1AttackMultiplier}" else ""
                     val bonusText = if (p1AttackBonus > 0) " +${p1AttackBonus}" else ""
-                    val effectText = if (multiplierText.isNotEmpty() || bonusText.isNotEmpty()) 
-                        " [基礎:$baseAttack$bonusText$multiplierText]" else ""
+                    val effectText = " [($baseDamageFormula)$bonusText$multiplierText]"
                     p1AttackBonus = 0
                     p1AttackMultiplier = 1.0
                     
@@ -444,8 +447,7 @@ class GameViewModel : ViewModel() {
                     attackDamage = ((baseAttack + p2AttackBonus) * p2AttackMultiplier).toInt()
                     val multiplierText = if (p2AttackMultiplier > 1.0) " ×${p2AttackMultiplier}" else ""
                     val bonusText = if (p2AttackBonus > 0) " +${p2AttackBonus}" else ""
-                    val effectText = if (multiplierText.isNotEmpty() || bonusText.isNotEmpty()) 
-                        " [基礎:$baseAttack$bonusText$multiplierText]" else ""
+                    val effectText = " [($baseDamageFormula)$bonusText$multiplierText]"
                     p2AttackBonus = 0
                     p2AttackMultiplier = 1.0
                     
@@ -728,14 +730,18 @@ class GameViewModel : ViewModel() {
             
             if (bothCorrect) {
                 // 【両者同時正解】→ 自分の数字の合計ダメージを自分が受ける
-                val selfDamage = myAnswer.map { it.digitToInt() }.sum()
+                val digits = myAnswer.map { it.digitToInt() }
+                val selfDamage = digits.sum()
+                val damageFormula = "${digits.joinToString("+")}=$selfDamage"
                 val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
                 val newHp = (currentHp - selfDamage).coerceIn(0, 100)
-                return "💥 両者正解！ $playerName → 自分 -${selfDamage} HP (${currentHp} → ${newHp})"
+                return "💥 両者正解！ $playerName → 自分 -${selfDamage} HP [($damageFormula)] (${currentHp} → ${newHp})"
             }
             
             // 【通常の攻撃】片方だけ正解
-            val baseAttack = myAnswer.map { it.digitToInt() }.sum()
+            val digits = myAnswer.map { it.digitToInt() }
+            val baseAttack = digits.sum()
+            val baseDamageFormula = "${digits.joinToString("+")}=$baseAttack"
             val attackBonus = if (player == Player.P1) p1AttackBonus else p2AttackBonus
             val attackMultiplier = if (player == Player.P1) p1AttackMultiplier else p2AttackMultiplier
             val hitBonus = if (player == Player.P1) p1HitBonus else p2HitBonus
@@ -748,19 +754,24 @@ class GameViewModel : ViewModel() {
             val attackDamage = ((baseAttack + attackBonus) * attackMultiplier).toInt()
             val totalDamage = attackDamage + bonusDamage
             
+            // 効果テキストの作成
+            val multiplierText = if (attackMultiplier > 1.0) " ×${attackMultiplier}" else ""
+            val bonusText = if (attackBonus > 0) " +${attackBonus}" else ""
+            val effectText = " [($baseDamageFormula)$bonusText$multiplierText]"
+            
             // 反撃チェック
             val hasCounter = if (player == Player.P1) p2HasCounter else p1HasCounter
             
             if (hasCounter) {
                 val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
                 val newHp = (currentHp - attackDamage).coerceIn(0, 100)
-                return "🔄 $targetName の反撃！ → $playerName -${attackDamage} HP (${currentHp} → ${newHp})"
+                return "🔄 $targetName の反撃！ → $playerName -${attackDamage} HP$effectText (${currentHp} → ${newHp})"
             } else {
                 val targetHp = if (player == Player.P1) p2Hp.value else p1Hp.value
                 val newHp = (targetHp - totalDamage).coerceIn(0, 100)
                 
-                val bonusText = if (bonusDamage > 0) " (+${bonusDamage})" else ""
-                return "⚔️ $playerName → $targetName -${totalDamage} HP${bonusText} (${targetHp} → ${newHp})"
+                val bonusDamageText = if (bonusDamage > 0) " (+${bonusDamage})" else ""
+                return "⚔️ $playerName → $targetName -${totalDamage} HP$effectText$bonusDamageText (${targetHp} → ${newHp})"
             }
         }
         
