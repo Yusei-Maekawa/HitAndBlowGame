@@ -119,6 +119,13 @@ class GameViewModel : ViewModel() {
     private val _lastDamageInfo = MutableStateFlow("")
     val lastDamageInfo = _lastDamageInfo.asStateFlow()
     
+    // プレイヤーのバフ・ステータス状態を監視可能に
+    private val _p1StatusEffects = MutableStateFlow("")
+    val p1StatusEffects = _p1StatusEffects.asStateFlow()
+    
+    private val _p2StatusEffects = MutableStateFlow("")
+    val p2StatusEffects = _p2StatusEffects.asStateFlow()
+    
     private val _showCardSelectDialog = MutableStateFlow(false)
     val showCardSelectDialog = _showCardSelectDialog.asStateFlow()
 
@@ -140,6 +147,7 @@ class GameViewModel : ViewModel() {
         // ラウンド開始時に両プレイヤーにカード選択の機会を与える
         _phase.value = GamePhase.CARD_SELECT_P1
         prepareRoundStartCards()
+        updateStatusEffects() // ステータスを更新
     }
 
     fun onInputSubmitted(input: String) {
@@ -326,6 +334,9 @@ class GameViewModel : ViewModel() {
         // 死亡チェック
         if (_p1Hp.value <= 0) _winner.value = Player.P2
         if (_p2Hp.value <= 0) _winner.value = Player.P1
+        
+        // ステータス効果を更新
+        updateStatusEffects()
     }
     // processGuess の最後の方、ターン交代の直前に追加
     private fun checkRoundProgress() {
@@ -419,6 +430,7 @@ class GameViewModel : ViewModel() {
             }
             else -> {} // 補助系カードはここでは処理しない
         }
+        updateStatusEffects() // ステータス更新
     }
     
     // 補助系カードを使用する
@@ -458,6 +470,33 @@ class GameViewModel : ViewModel() {
         } else {
             _p2HandCards.value = _p2HandCards.value.filter { it != card }
         }
+        updateStatusEffects() // ステータス更新
+    }
+    
+    // ステータス効果を文字列化して表示用に更新
+    private fun updateStatusEffects() {
+        val p1Effects = mutableListOf<String>()
+        if (p1AttackBonus > 0) p1Effects.add("攻撃+${p1AttackBonus}")
+        if (p1AttackMultiplier > 1.0) p1Effects.add("攻撃×${p1AttackMultiplier}")
+        if (p1DefenseReduction > 0) p1Effects.add("防御+${p1DefenseReduction}")
+        if (p1DefenseMultiplier < 1.0) p1Effects.add("防御×${p1DefenseMultiplier}")
+        if (p1IsInvincible) p1Effects.add("無敵")
+        if (p1HasCounter) p1Effects.add("反撃")
+        if (p1HitBonus > 0) p1Effects.add("Hit×${p1HitBonus}")
+        if (p1BlowBonus > 0) p1Effects.add("Blow×${p1BlowBonus}")
+        
+        val p2Effects = mutableListOf<String>()
+        if (p2AttackBonus > 0) p2Effects.add("攻撃+${p2AttackBonus}")
+        if (p2AttackMultiplier > 1.0) p2Effects.add("攻撃×${p2AttackMultiplier}")
+        if (p2DefenseReduction > 0) p2Effects.add("防御+${p2DefenseReduction}")
+        if (p2DefenseMultiplier < 1.0) p2Effects.add("防御×${p2DefenseMultiplier}")
+        if (p2IsInvincible) p2Effects.add("無敵")
+        if (p2HasCounter) p2Effects.add("反撃")
+        if (p2HitBonus > 0) p2Effects.add("Hit×${p2HitBonus}")
+        if (p2BlowBonus > 0) p2Effects.add("Blow×${p2BlowBonus}")
+        
+        _p1StatusEffects.value = if (p1Effects.isEmpty()) "" else p1Effects.joinToString(" | ")
+        _p2StatusEffects.value = if (p2Effects.isEmpty()) "" else p2Effects.joinToString(" | ")
     }
 
 }

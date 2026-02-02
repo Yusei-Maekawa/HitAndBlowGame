@@ -208,6 +208,15 @@
                     android:max="100"
                     android:progress="100"
                     android:progressTint="#FF5252" />
+                <TextView
+                    android:id="@+id/textP1Status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="10sp"
+                    android:textColor="#FF9800"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"
+                    android:text="" />
             </LinearLayout>
 
             <View android:layout_width="16dp" android:layout_height="1dp" />
@@ -234,6 +243,16 @@
                     android:progress="100"
                     android:progressTint="#448AFF"
                     android:scaleX="-1" />
+                <TextView
+                    android:id="@+id/textP2Status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="10sp"
+                    android:textColor="#2196F3"
+                    android:textStyle="bold"
+                    android:textAlignment="textEnd"
+                    android:layout_marginTop="2dp"
+                    android:text="" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

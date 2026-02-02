@@ -172,6 +172,20 @@ class GameActivity : AppCompatActivity() {
                 }
             }
             
+            // ステータス効果監視
+            lifecycleScope.launch {
+                viewModel.p1StatusEffects.collect { status ->
+                    binding.textP1Status.text = status
+                    binding.textP1Status.visibility = if (status.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+            lifecycleScope.launch {
+                viewModel.p2StatusEffects.collect { status ->
+                    binding.textP2Status.text = status
+                    binding.textP2Status.visibility = if (status.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }
+            
             // カード選択画面の監視
             lifecycleScope.launch {
                 viewModel.availableCards.collect { cards ->
