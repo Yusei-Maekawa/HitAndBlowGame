@@ -34,8 +34,15 @@ class GameActivity : AppCompatActivity() {
         viewModel.setCardMode(isCardMode)
         viewModel.setDigitCount(digitCount)
 
+        // カードモード専用UIの表示制御
         if (isCardMode) {
             binding.layoutHp.visibility = View.VISIBLE
+            binding.layoutProgressInfo.visibility = View.VISIBLE
+            binding.textDamageInfo.visibility = View.VISIBLE
+        } else {
+            binding.layoutHp.visibility = View.GONE
+            binding.layoutProgressInfo.visibility = View.GONE
+            binding.textDamageInfo.visibility = View.GONE
         }
 
         setupRecyclerViews()
@@ -100,6 +107,8 @@ class GameActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
+        val isCardMode = intent.getBooleanExtra("IS_CARD_MODE", false)
+        
         // --- 1. フェーズとターンの総合監視 ---
         lifecycleScope.launch {
             viewModel.phase.collect { phase ->
@@ -109,7 +118,7 @@ class GameActivity : AppCompatActivity() {
                     GamePhase.CARD_SELECT_P2 -> "P2: カード選択"
                     GamePhase.SETTING_P1 -> "P1: 数字セット"
                     GamePhase.SETTING_P2 -> "P2: 数字セット"
-                    GamePhase.PLAYING -> "バトル中"
+                    GamePhase.PLAYING -> if (isCardMode) "バトル中" else "推測中"
                     GamePhase.FINISHED -> "試合終了"
                 }
                 
@@ -119,34 +128,81 @@ class GameActivity : AppCompatActivity() {
             }
         }
 
-        // --- ラウンドとターンの表示 ---
-        lifecycleScope.launch {
-            viewModel.currentRound.collect { round ->
-                binding.textRoundInfo.text = "ラウンド: $round"
+        // --- カードモード専用の監視 ---
+        if (isCardMode) {
+            // ラウンドとターンの表示
+            lifecycleScope.launch {
+                viewModel.currentRound.collect { round ->
+                    binding.textRoundInfo.text = "ラウンド: $round"
+                }
             }
-        }
-        
-        lifecycleScope.launch {
-            viewModel.currentTurn.collect { turn ->
-                binding.textTurnInfo.text = "ターン: $turn"
+            
+            lifecycleScope.launch {
+                viewModel.currentTurn.collect { turn ->
+                    binding.textTurnInfo.text = "ターン: $turn"
+                }
             }
-        }
-        
-        lifecycleScope.launch {
-            viewModel.totalTurns.collect { total ->
-                binding.textTotalTurns.text = "総ターン数: $total"
+            
+            lifecycleScope.launch {
+                viewModel.totalTurns.collect { total ->
+                    binding.textTotalTurns.text = "総ターン数: $total"
+                }
             }
-        }
-        
-        // --- ダメージ情報の表示 ---
-        lifecycleScope.launch {
-            viewModel.lastDamageInfo.collect { damageInfo ->
-                if (damageInfo.isNotEmpty()) {
-                    binding.textDamageInfo.text = damageInfo
+            
+            // ダメージ情報の表示
+            lifecycleScope.launch {
+                viewModel.lastDamageInfo.collect { damageInfo ->
+                    if (damageInfo.isNotEmpty()) {
+                        binding.textDamageInfo.text = damageInfo
+                    }
+                }
+            }
+            
+            // HP監視
+            lifecycleScope.launch {
+                viewModel.p1Hp.collect { hp ->
+                    binding.progressP1Hp.progress = hp
+                    binding.textP1Hp.text = "P1 HP: $hp"
+                }
+            }
+            lifecycleScope.launch {
+                viewModel.p2Hp.collect { hp ->
+                    binding.progressP2Hp.progress = hp
+                    binding.textP2Hp.text = "P2 HP: $hp"
+                }
+            }
+            
+            // カード選択画面の監視
+            lifecycleScope.launch {
+                viewModel.availableCards.collect { cards ->
+                    if (cards.isNotEmpty()) {
+                        val currentPhase = viewModel.phase.value
+                        val player = when (currentPhase) {
+                            GamePhase.CARD_SELECT_P1 -> Player.P1
+                            GamePhase.CARD_SELECT_P2 -> Player.P2
+                            else -> viewModel.currentPlayer.value
+                        }
+                        
+                        val title = when (currentPhase) {
+                            GamePhase.CARD_SELECT_P1, GamePhase.CARD_SELECT_P2 -> 
+                                "${if (player == Player.P1) "P1" else "P2"}: ラウンド開始カード"
+                            else -> "ボーナスカード獲得！"
+                        }
+                        
+                        val items = cards.map { "${it.title}\n${it.description}" }.toTypedArray()
+                        androidx.appcompat.app.AlertDialog.Builder(this@GameActivity)
+                            .setTitle(title)
+                            .setItems(items) { _, which ->
+                                viewModel.onCardSelected(player, cards[which])
+                            }
+                            .setCancelable(false)
+                            .show()
+                    }
                 }
             }
         }
 
+        // --- 共通の監視（通常モード・カードモード共通） ---
         lifecycleScope.launch {
             viewModel.currentPlayer.collect { player ->
                 val playerName = if (player == Player.P1) "P1" else "P2"
@@ -155,53 +211,16 @@ class GameActivity : AppCompatActivity() {
                 // 視覚的なターン強調（アクティブなプレイヤー以外を薄くする）
                 binding.recyclerP1Logs.alpha = if (player == Player.P1) 1.0f else 0.3f
                 binding.recyclerP2Logs.alpha = if (player == Player.P2) 1.0f else 0.3f
-                binding.layoutP1Status.alpha = if (player == Player.P1) 1.0f else 0.3f
-                binding.layoutP2Status.alpha = if (player == Player.P2) 1.0f else 0.3f
-            }
-        }
-
-        // --- 2. カード選択画面の監視 ---
-        lifecycleScope.launch {
-            viewModel.availableCards.collect { cards ->
-                if (cards.isNotEmpty()) {
-                    val currentPhase = viewModel.phase.value
-                    val player = when (currentPhase) {
-                        GamePhase.CARD_SELECT_P1 -> Player.P1
-                        GamePhase.CARD_SELECT_P2 -> Player.P2
-                        else -> viewModel.currentPlayer.value
-                    }
-                    
-                    val title = when (currentPhase) {
-                        GamePhase.CARD_SELECT_P1, GamePhase.CARD_SELECT_P2 -> 
-                            "${if (player == Player.P1) "P1" else "P2"}: ラウンド開始カード"
-                        else -> "ボーナスカード獲得！"
-                    }
-                    
-                    val items = cards.map { "${it.title}\n${it.description}" }.toTypedArray()
-                    androidx.appcompat.app.AlertDialog.Builder(this@GameActivity)
-                        .setTitle(title)
-                        .setItems(items) { _, which ->
-                            viewModel.onCardSelected(player, cards[which])
-                        }
-                        .setCancelable(false)
-                        .show()
+                
+                // カードモードの場合のみHPステータスの強調
+                if (isCardMode) {
+                    binding.layoutP1Status.alpha = if (player == Player.P1) 1.0f else 0.3f
+                    binding.layoutP2Status.alpha = if (player == Player.P2) 1.0f else 0.3f
                 }
             }
         }
 
-        // --- 3. HP・ログ・勝利監視 ---
-        lifecycleScope.launch {
-            viewModel.p1Hp.collect { hp ->
-                binding.progressP1Hp.progress = hp
-                binding.textP1Hp.text = "P1 HP: $hp"
-            }
-        }
-        lifecycleScope.launch {
-            viewModel.p2Hp.collect { hp ->
-                binding.progressP2Hp.progress = hp
-                binding.textP2Hp.text = "P2 HP: $hp"
-            }
-        }
+        // ログと勝利監視
         lifecycleScope.launch { viewModel.p1Logs.collect { p1Adapter.submitList(it) } }
         lifecycleScope.launch { viewModel.p2Logs.collect { p2Adapter.submitList(it) } }
         lifecycleScope.launch {

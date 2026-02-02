@@ -128,8 +128,11 @@ class GameViewModel : ViewModel() {
     fun setCardMode(enabled: Boolean) {
         isCardMode = enabled
         if (enabled) {
-            // ゲーム開始時に各プレイヤーにカードを配布
+            // カードモードの場合のみ、ラウンド開始時のカード選択へ
             startNewRound()
+        } else {
+            // 通常モードは数字設定から開始
+            _phase.value = GamePhase.SETTING_P1
         }
     }
 

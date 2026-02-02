@@ -30,13 +30,15 @@
 
         <!-- 進行状況表示エリア -->
         <LinearLayout
+            android:id="@+id/layoutProgressInfo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:padding="8dp"
             android:background="#E3F2FD"
             android:layout_marginTop="4dp"
-            android:gravity="center">
+            android:gravity="center"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/textRoundInfo"
@@ -83,6 +85,7 @@
             android:padding="4dp"
             android:background="#FFEBEE"
             android:layout_marginTop="4dp"
+            android:visibility="gone"
             android:text="" />
 
         <View
@@ -182,7 +185,8 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:padding="8dp"
-            android:weightSum="2">
+            android:weightSum="2"
+            android:visibility="gone">
 
             <LinearLayout
                 android:id="@+id/layoutP1Status"
