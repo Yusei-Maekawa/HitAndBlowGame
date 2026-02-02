@@ -279,7 +279,7 @@ class GameViewModel : ViewModel() {
                 if (p2NextBuff != null) {
                     showCardEffect(Player.P2, p2NextBuff!!)
                 }
-                delay(400)
+                delay(600)
                 
                 // ステップ2: 手札スキル発動演出
                 if (p1UsedCard != null) {
@@ -288,34 +288,34 @@ class GameViewModel : ViewModel() {
                 if (p2UsedCard != null) {
                     showCardEffect(Player.P2, p2UsedCard!!)
                 }
-                delay(400)
+                delay(600)
                 
                 // ステップ3: Hit/Blow結果表示
                 _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P1, null, 0, p1Result.hit, p1Result.blow)
-                delay(1200)
+                delay(2000)
                 
                 _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P2, null, 0, p2Result.hit, p2Result.blow)
-                delay(1200)
+                delay(2000)
                 
                 // ステップ4: P1の攻撃演出（ダメージがある場合のみ）
                 val p1Damage = calculateActualDamage(Player.P1, p1Result.hit, p1Result.blow)
                 if (p1Damage > 0) {
                     _replayEffect.value = ReplayEffect(EffectType.ATTACK, Player.P1, Player.P2, p1Damage)
-                    delay(1500)
+                    delay(2000)
                 }
                 
                 processPlayerAction(Player.P1, p1CurrentInput)
-                delay(400)
+                delay(600)
 
                 // ステップ5: P2の攻撃演出（ダメージがある場合のみ）
                 val p2Damage = calculateActualDamage(Player.P2, p2Result.hit, p2Result.blow)
                 if (p2Damage > 0) {
                     _replayEffect.value = ReplayEffect(EffectType.ATTACK, Player.P2, Player.P1, p2Damage)
-                    delay(1500)
+                    delay(2000)
                 }
 
                 processPlayerAction(Player.P2, p2CurrentInput)
-                delay(400)
+                delay(600)
             } else {
                 // 通常モードの処理（Hit/Blowのみで攻撃なし）
                 processPlayerAction(Player.P1, p1CurrentInput)
@@ -395,14 +395,22 @@ class GameViewModel : ViewModel() {
         val baseDamage = hit * 10 + blow * 3
         if (baseDamage == 0) return 0
         
-        val (attackBonus, attackMultiplier) = if (attacker == Player.P1) {
-            p1AttackBonus to p1AttackMultiplier
+        val (attackBonus, attackMultiplier, hitBonus, blowBonus) = if (attacker == Player.P1) {
+            Tuple4(p1AttackBonus, p1AttackMultiplier, p1HitBonus, p1BlowBonus)
         } else {
-            p2AttackBonus to p2AttackMultiplier
+            Tuple4(p2AttackBonus, p2AttackMultiplier, p2HitBonus, p2BlowBonus)
         }
         
-        return ((baseDamage + attackBonus) * attackMultiplier).toInt()
+        // ボーナスダメージを追加
+        var bonusDamage = 0
+        if (hitBonus > 0 && hit > 0) bonusDamage += hit * hitBonus
+        if (blowBonus > 0 && blow > 0) bonusDamage += blow * blowBonus
+        
+        return ((baseDamage + attackBonus) * attackMultiplier).toInt() + bonusDamage
     }
+    
+    // Tuple4ヘルパークラス
+    private data class Tuple4<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
     // 状態異常のサマリーを構築
     private fun buildStatusSummary(): String {
