@@ -276,43 +276,46 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- リプレイオーバーレイ -->
-    <LinearLayout
-        android:id="@+id/layoutReplayOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="#DD000000"
-        android:gravity="center"
-        android:padding="32dp"
+    <!-- 攻撃エフェクト -->
+    <View
+        android:id="@+id/viewAttackEffect"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_gravity="center"
+        android:background="@android:color/transparent"
         android:visibility="gone"
-        android:clickable="true"
-        android:focusable="true"
-        android:elevation="10dp">
+        android:elevation="5dp" />
 
-        <TextView
-            android:id="@+id/textReplayTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="📊 ターン結果"
-            android:textColor="#FFFFFF"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="32dp" />
+    <!-- フローティングダメージ数値 -->
+    <TextView
+        android:id="@+id/textFloatingDamage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:textSize="48sp"
+        android:textStyle="bold"
+        android:textColor="#FF0000"
+        android:visibility="gone"
+        android:elevation="6dp"
+        android:shadowColor="#000000"
+        android:shadowDx="2"
+        android:shadowDy="2"
+        android:shadowRadius="4" />
 
-        <TextView
-            android:id="@+id/textReplayMessage"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:gravity="center"
-            android:lineSpacingMultiplier="1.8"
-            android:background="#33FFFFFF"
-            android:padding="16dp"
-            android:elevation="4dp"
-            android:text="" />
-    </LinearLayout>
+    <!-- リプレイ字幕（画面下部） -->
+    <TextView
+        android:id="@+id/textReplayCaption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="80dp"
+        android:background="#CC000000"
+        android:padding="12dp"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textAlignment="center"
+        android:visibility="gone"
+        android:elevation="5dp" />
 
     <LinearLayout
         android:id="@+id/layoutCardSelection"

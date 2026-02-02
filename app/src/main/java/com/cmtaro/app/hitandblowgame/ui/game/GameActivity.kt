@@ -1,4 +1,4 @@
-package com.cmtaro.app.hitandblowgame.ui.game
+﻿package com.cmtaro.app.hitandblowgame.ui.game
 
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
@@ -16,6 +16,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.cmtaro.app.hitandblowgame.databinding.ActivityGameBinding
 import kotlinx.coroutines.launch
 
+/**
+ * ヒットアンドブロー（およびカードモード）のメインゲーム画面を表示するActivity。
+ * ViewModelからの状態を監視し、UIの更新やアニメーションの制御を行います。
+ */
 class GameActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGameBinding
@@ -25,11 +29,14 @@ class GameActivity : AppCompatActivity() {
     private lateinit var p2Adapter: GuessLogAdapter
     private lateinit var battleLogAdapter: BattleLogAdapter
 
+    /** 現在入力中の文字列 */
     private var currentInputString = ""
-    private var digitCount = 3 // Intentから受け取った値で上書きされる
+    /** 推測する数字の桁数（初期値は3） */
+    private var digitCount = 3 
     
-    // アニメーション制御用
+    /** アニメーション制御用の前回ラウンド数 */
     private var lastRound = 1
+    /** アニメーション制御用の前回ターン数 */
     private var lastTurn = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,14 +44,14 @@ class GameActivity : AppCompatActivity() {
         binding = ActivityGameBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 初期設定
+        // インテントから設定値を取得
         digitCount = intent.getIntExtra("DIGIT_COUNT", 3)
         val isCardMode = intent.getBooleanExtra("IS_CARD_MODE", false)
 
         viewModel.setCardMode(isCardMode)
         viewModel.setDigitCount(digitCount)
 
-        // カードモード専用UIの表示制御
+        // カードモード専用UIの初期表示制御
         if (isCardMode) {
             binding.layoutHp.visibility = View.VISIBLE
             binding.layoutProgressInfo.visibility = View.VISIBLE
@@ -62,6 +69,9 @@ class GameActivity : AppCompatActivity() {
         setupObservers()
     }
 
+    /**
+     * ログ表示用のRecyclerViewを初期化します。
+     */
     private fun setupRecyclerViews() {
         p1Adapter = GuessLogAdapter()
         p2Adapter = GuessLogAdapter()
@@ -81,6 +91,9 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 数字キーパッドのクリックリスナーを設定します。
+     */
     private fun setupNumericKeypad() {
         val buttons = listOf(
             binding.btn0, binding.btn1, binding.btn2, binding.btn3, binding.btn4,
@@ -116,6 +129,10 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 現在の入力状態を画面に反映します。
+     * 設定フェーズでは数字を伏せ、プレイフェーズでは数字を表示します。
+     */
     private fun updateInputDisplay() {
         val phase = viewModel.phase.value
         if (phase == GamePhase.SETTING_P1 || phase == GamePhase.SETTING_P2) {
@@ -128,6 +145,9 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * ViewModelの各StateFlowを監視し、UIを更新します。
+     */
     private fun setupObservers() {
         val isCardMode = intent.getBooleanExtra("IS_CARD_MODE", false)
 
@@ -196,23 +216,21 @@ class GameActivity : AppCompatActivity() {
                 }
             }
 
-            // リプレイオーバーレイの監視
+            // リプレイ字幕の監視
             lifecycleScope.launch {
-                viewModel.showReplayOverlay.collect { show ->
-                    if (show) {
-                        binding.layoutReplayOverlay.visibility = View.VISIBLE
-                        animateFadeIn(binding.layoutReplayOverlay)
-                    } else {
-                        animateFadeOut(binding.layoutReplayOverlay) {
-                            binding.layoutReplayOverlay.visibility = View.GONE
-                        }
+                viewModel.replayCaption.collect { caption ->
+                    if (caption.isNotEmpty()) {
+                        binding.textReplayCaption.text = caption
+                        binding.textReplayCaption.visibility = View.VISIBLE
+                        animateFadeIn(binding.textReplayCaption, duration = 200)
+                        
+                        // 1.5秒後に自動的にフェードアウト
+                        binding.textReplayCaption.postDelayed({
+                            animateFadeOut(binding.textReplayCaption, onEnd = {
+                                binding.textReplayCaption.visibility = View.GONE
+                            }, duration = 300)
+                        }, 1500)
                     }
-                }
-            }
-
-            lifecycleScope.launch {
-                viewModel.replayMessage.collect { message ->
-                    binding.textReplayMessage.text = message
                 }
             }
 
@@ -288,9 +306,9 @@ class GameActivity : AppCompatActivity() {
                     binding.textP1Status.text = status
                     if (status.isEmpty()) {
                         if (binding.textP1Status.visibility == View.VISIBLE) {
-                            animateFadeOut(binding.textP1Status) {
+                            animateFadeOut(binding.textP1Status, onEnd = {
                                 binding.textP1Status.visibility = View.GONE
-                            }
+                            })
                         }
                     } else {
                         if (binding.textP1Status.visibility != View.VISIBLE) {
@@ -307,9 +325,9 @@ class GameActivity : AppCompatActivity() {
                     binding.textP2Status.text = status
                     if (status.isEmpty()) {
                         if (binding.textP2Status.visibility == View.VISIBLE) {
-                            animateFadeOut(binding.textP2Status) {
+                            animateFadeOut(binding.textP2Status, onEnd = {
                                 binding.textP2Status.visibility = View.GONE
-                            }
+                            })
                         }
                     } else {
                         if (binding.textP2Status.visibility != View.VISIBLE) {
@@ -414,7 +432,10 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
-    // 手札確認ダイアログを表示
+    /**
+     * 手札確認ダイアログを表示します。
+     * @param phase 現在のゲームフェーズ
+     */
     private fun showHandConfirmDialog(phase: GamePhase) {
         val player = if (phase == GamePhase.HAND_CONFIRM_P1) Player.P1 else Player.P2
         val playerName = if (player == Player.P1) "P1" else "P2"
@@ -437,7 +458,10 @@ class GameActivity : AppCompatActivity() {
             .show()
     }
 
-    // 手札カード使用ダイアログを表示
+    /**
+     * 手札カード使用ダイアログを表示します。
+     * @param phase 現在のゲームフェーズ
+     */
     private fun showHandCardDialog(phase: GamePhase) {
         val player = if (phase == GamePhase.CARD_USE_P1) Player.P1 else Player.P2
         val playerName = if (player == Player.P1) "P1" else "P2"
@@ -474,7 +498,11 @@ class GameActivity : AppCompatActivity() {
 
     // === アニメーション関数 ===
 
-    // フェードインアニメーション
+    /**
+     * Viewをフェードインさせるアニメーション。
+     * @param view 対象のView
+     * @param duration アニメーション時間（ミリ秒）
+     */
     private fun animateFadeIn(view: View, duration: Long = 300) {
         view.alpha = 0f
         view.animate()
@@ -484,8 +512,13 @@ class GameActivity : AppCompatActivity() {
             .start()
     }
 
-    // フェードアウトアニメーション
-    private fun animateFadeOut(view: View, onEnd: () -> Unit = {}, duration: Long = 300) {
+    /**
+     * Viewをフェードアウトさせるアニメーション。
+     * @param view 対象のView
+     * @param duration アニメーション時間（ミリ秒）
+     * @param onEnd アニメーション終了時のコールバック
+     */
+    private fun animateFadeOut(view: View, duration: Long = 300, onEnd: () -> Unit = {}) {
         view.animate()
             .alpha(0f)
             .setDuration(duration)
@@ -494,7 +527,10 @@ class GameActivity : AppCompatActivity() {
             .start()
     }
 
-    // プレイヤー切り替えアニメーション
+    /**
+     * プレイヤーの交代を視覚的に強調するアニメーション。
+     * アクティブなプレイヤーのViewを不透明かつ少し大きくし、非アクティブな方を半透明かつ小さくします。
+     */
     private fun animatePlayerSwitch(view1: View, view2: View, isPlayer1Active: Boolean) {
         val activeAlpha = 1.0f
         val inactiveAlpha = 0.3f
@@ -520,7 +556,9 @@ class GameActivity : AppCompatActivity() {
             .start()
     }
 
-    // ダメージ受けた時のパルスアニメーション（赤く点滅）
+    /**
+     * ダメージを受けた際の揺れと色の変化によるアニメーション。
+     */
     private fun animateDamage(view: View) {
         val originalBackground = view.background
         val originalElevation = view.elevation
@@ -541,7 +579,9 @@ class GameActivity : AppCompatActivity() {
         shakeX.start()
     }
 
-    // スケールアニメーション（ポップアップ）
+    /**
+     * Viewが飛び出すようなスケールアニメーション。
+     */
     private fun animatePopUp(view: View) {
         view.scaleX = 0f
         view.scaleY = 0f
@@ -558,7 +598,9 @@ class GameActivity : AppCompatActivity() {
         animSet.start()
     }
 
-    // ボタンプレスアニメーション
+    /**
+     * ボタンが押された際のフィードバックアニメーション（縮小して元に戻る）。
+     */
     private fun animateButtonPress(view: View) {
         val scaleDown = AnimatorSet().apply {
             playTogether(
@@ -581,7 +623,9 @@ class GameActivity : AppCompatActivity() {
         scaleDown.doOnEnd { scaleUp.start() }
     }
     
-    // パルスアニメーション（既存Viewの強調用）
+    /**
+     * Viewを一瞬大きくして強調するパルスアニメーション。
+     */
     private fun animatePulse(view: View) {
         val pulse = AnimatorSet().apply {
             playTogether(
@@ -593,4 +637,130 @@ class GameActivity : AppCompatActivity() {
         }
         pulse.start()
     }
+
+    // === リプレイ演出専用のアニメーション ===
+
+    /**
+     * 攻撃エフェクトを表示
+     * @param fromPlayer 攻撃元のプレイヤー
+     * @param damage ダメージ量
+     */
+    fun showAttackEffect(fromPlayer: Player, damage: Int) {
+        lifecycleScope.launch {
+            // 攻撃元の位置を取得
+            val fromView = if (fromPlayer == Player.P1) binding.layoutP1Status else binding.layoutP2Status
+            val toView = if (fromPlayer == Player.P1) binding.layoutP2Status else binding.layoutP1Status
+            
+            // 攻撃エフェクトの初期位置を設定
+            val fromLocation = IntArray(2)
+            fromView.getLocationOnScreen(fromLocation)
+            val toLocation = IntArray(2)
+            toView.getLocationOnScreen(toLocation)
+            
+            binding.viewAttackEffect.visibility = View.VISIBLE
+            binding.viewAttackEffect.x = fromLocation[0].toFloat()
+            binding.viewAttackEffect.y = fromLocation[1].toFloat()
+            binding.viewAttackEffect.setBackgroundColor(Color.parseColor("#FF5722"))
+            binding.viewAttackEffect.alpha = 1f
+            binding.viewAttackEffect.scaleX = 0.5f
+            binding.viewAttackEffect.scaleY = 0.5f
+            
+            // 攻撃エフェクトを相手に向かって移動
+            val moveX = ObjectAnimator.ofFloat(binding.viewAttackEffect, "x", 
+                fromLocation[0].toFloat(), toLocation[0].toFloat())
+            val moveY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "y", 
+                fromLocation[1].toFloat(), toLocation[1].toFloat())
+            val scale = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleX", 0.5f, 1.5f)
+            val scaleY = ObjectAnimator.ofFloat(binding.viewAttackEffect, "scaleY", 0.5f, 1.5f)
+            
+            val attackAnim = AnimatorSet().apply {
+                playTogether(moveX, moveY, scale, scaleY)
+                duration = 500
+            }
+            
+            attackAnim.start()
+            attackAnim.doOnEnd {
+                // 着弾時にダメージ数値を表示
+                showFloatingDamage(toView, damage, false)
+                binding.viewAttackEffect.visibility = View.GONE
+            }
+        }
+    }
+    
+    /**
+     * フローティングダメージ数値を表示
+     * @param targetView ダメージを受けたView
+     * @param value ダメージ/回復量
+     * @param isHeal 回復かどうか
+     */
+    fun showFloatingDamage(targetView: View, value: Int, isHeal: Boolean) {
+        lifecycleScope.launch {
+            val location = IntArray(2)
+            targetView.getLocationOnScreen(location)
+            
+            binding.textFloatingDamage.text = if (isHeal) "+$value" else "-$value"
+            binding.textFloatingDamage.setTextColor(if (isHeal) Color.parseColor("#4CAF50") else Color.parseColor("#F44336"))
+            binding.textFloatingDamage.x = location[0].toFloat() + (targetView.width / 2) - 50
+            binding.textFloatingDamage.y = location[1].toFloat()
+            binding.textFloatingDamage.visibility = View.VISIBLE
+            binding.textFloatingDamage.alpha = 1f
+            binding.textFloatingDamage.scaleX = 0.5f
+            binding.textFloatingDamage.scaleY = 0.5f
+            
+            // 上に浮かび上がりながらフェードアウト
+            val moveUp = ObjectAnimator.ofFloat(binding.textFloatingDamage, "translationY", 0f, -150f)
+            val fadeOut = ObjectAnimator.ofFloat(binding.textFloatingDamage, "alpha", 1f, 0f)
+            val scaleUpX = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleX", 0.5f, 1.5f, 1f)
+            val scaleUpY = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleY", 0.5f, 1.5f, 1f)
+            
+            val floatAnim = AnimatorSet().apply {
+                playTogether(moveUp, fadeOut, scaleUpX, scaleUpY)
+                duration = 1000
+            }
+            
+            floatAnim.start()
+            floatAnim.doOnEnd {
+                binding.textFloatingDamage.visibility = View.GONE
+                binding.textFloatingDamage.translationY = 0f
+            }
+        }
+    }
+    
+    /**
+     * バリア演出を表示（無敵時）
+     * @param targetView 対象のView
+     */
+    fun showBarrierEffect(targetView: View) {
+        lifecycleScope.launch {
+            val originalElevation = targetView.elevation
+            val originalBackground = targetView.background
+            
+            // 青白く光らせる
+            targetView.setBackgroundColor(Color.parseColor("#80D1F5FF"))
+            targetView.elevation = 12f
+            
+            val pulse = AnimatorSet().apply {
+                playTogether(
+                    ObjectAnimator.ofFloat(targetView, "scaleX", 1f, 1.1f, 1f),
+                    ObjectAnimator.ofFloat(targetView, "scaleY", 1f, 1.1f, 1f)
+                )
+                duration = 500
+                interpolator = OvershootInterpolator()
+            }
+            
+            pulse.start()
+            pulse.doOnEnd {
+                targetView.postDelayed({
+                    targetView.background = originalBackground
+                    targetView.elevation = originalElevation
+                }, 300)
+            }
+            
+            // 「BLOCKED!」の表示
+            showFloatingDamage(targetView, 0, false)
+            binding.textFloatingDamage.text = "BLOCKED!"
+            binding.textFloatingDamage.setTextColor(Color.parseColor("#2196F3"))
+        }
+    }
+
 }
