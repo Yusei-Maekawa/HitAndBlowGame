@@ -235,15 +235,25 @@ class GameActivity : AppCompatActivity() {
                             else -> viewModel.currentPlayer.value
                         }
                         
-                        val title = when (currentPhase) {
+                        val playerName = if (player == Player.P1) "P1" else "P2"
+                        val phaseText = when (currentPhase) {
                             GamePhase.CARD_SELECT_P1, GamePhase.CARD_SELECT_P2 -> 
-                                "${if (player == Player.P1) "P1" else "P2"}: ラウンド開始カード"
-                            else -> "ボーナスカード獲得！"
+                                "【ラウンド開始】$playerName がカードを選択してください"
+                            else -> "【ボーナス】$playerName がカードを獲得！"
                         }
                         
-                        val items = cards.map { "${it.title}\n${it.description}" }.toTypedArray()
+                        val categoryText = if (cards.firstOrNull()?.category == CardCategory.BUFF) {
+                            "\n※ラウンド中に効果が適用されます"
+                        } else {
+                            "\n※ゲーム中に手動で使用できます"
+                        }
+                        
+                        val items = cards.mapIndexed { index, card -> 
+                            "${index + 1}. 【${card.title}】\n   ${card.description}"
+                        }.toTypedArray()
+                        
                         androidx.appcompat.app.AlertDialog.Builder(this@GameActivity)
-                            .setTitle(title)
+                            .setTitle(phaseText + categoryText)
                             .setItems(items) { _, which ->
                                 viewModel.onCardSelected(player, cards[which])
                             }

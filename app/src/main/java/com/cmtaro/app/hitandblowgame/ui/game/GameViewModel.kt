@@ -415,45 +415,50 @@ class GameViewModel : ViewModel() {
                 }
             } else {
                 // 【通常の攻撃】片方だけ正解
-                val baseAttack = guess.map { it.digitToInt() }.sum()
+                // 自分が設定した数字の合計がダメージになる
+                val baseAttack = myAnswer.map { it.digitToInt() }.sum()
                 var attackDamage = 0
                 
                 // 攻撃バフを適用
                 if (current == Player.P1) {
                     attackDamage = ((baseAttack + p1AttackBonus) * p1AttackMultiplier).toInt()
-                    val multiplierText = if (p1AttackMultiplier > 1.0) " (×${p1AttackMultiplier})" else ""
-                    val bonusText = if (p1AttackBonus > 0) " (+${p1AttackBonus})" else ""
+                    val multiplierText = if (p1AttackMultiplier > 1.0) " ×${p1AttackMultiplier}" else ""
+                    val bonusText = if (p1AttackBonus > 0) " +${p1AttackBonus}" else ""
+                    val effectText = if (multiplierText.isNotEmpty() || bonusText.isNotEmpty()) 
+                        " [基礎:$baseAttack$bonusText$multiplierText]" else ""
                     p1AttackBonus = 0
                     p1AttackMultiplier = 1.0
                     
                     // 反撃チェック
                     if (p2HasCounter) {
                         _p1Hp.value = (p1Hp.value - attackDamage).coerceIn(0, 100)
-                        damageLog = "P2の反撃！P1に${attackDamage}ダメージ${multiplierText}${bonusText}"
-                        addBattleLog("🔄 P2 反撃！ → P1 -${attackDamage} HP (残り: ${_p1Hp.value})")
+                        damageLog = "P2の反撃！P1に${attackDamage}ダメージ$effectText"
+                        addBattleLog("🔄 P2 反撃！ → P1 -${attackDamage} HP$effectText (残り: ${_p1Hp.value})")
                         p2HasCounter = false
                     } else {
                         _p2Hp.value = (p2Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
-                        damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
-                        addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP (残り: ${_p2Hp.value})")
+                        damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}$effectText"
+                        addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP$effectText (残り: ${_p2Hp.value})")
                     }
                 } else {
                     attackDamage = ((baseAttack + p2AttackBonus) * p2AttackMultiplier).toInt()
-                    val multiplierText = if (p2AttackMultiplier > 1.0) " (×${p2AttackMultiplier})" else ""
-                    val bonusText = if (p2AttackBonus > 0) " (+${p2AttackBonus})" else ""
+                    val multiplierText = if (p2AttackMultiplier > 1.0) " ×${p2AttackMultiplier}" else ""
+                    val bonusText = if (p2AttackBonus > 0) " +${p2AttackBonus}" else ""
+                    val effectText = if (multiplierText.isNotEmpty() || bonusText.isNotEmpty()) 
+                        " [基礎:$baseAttack$bonusText$multiplierText]" else ""
                     p2AttackBonus = 0
                     p2AttackMultiplier = 1.0
                     
                     // 反撃チェック
                     if (p1HasCounter) {
                         _p2Hp.value = (p2Hp.value - attackDamage).coerceIn(0, 100)
-                        damageLog = "P1の反撃！P2に${attackDamage}ダメージ${multiplierText}${bonusText}"
-                        addBattleLog("🔄 P1 反撃！ → P2 -${attackDamage} HP (残り: ${_p2Hp.value})")
+                        damageLog = "P1の反撃！P2に${attackDamage}ダメージ$effectText"
+                        addBattleLog("🔄 P1 反撃！ → P2 -${attackDamage} HP$effectText (残り: ${_p2Hp.value})")
                         p1HasCounter = false
                     } else {
                         _p1Hp.value = (p1Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
-                        damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
-                        addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP (残り: ${_p1Hp.value})")
+                        damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}$effectText"
+                        addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP$effectText (残り: ${_p1Hp.value})")
                     }
                 }
             }
@@ -552,54 +557,84 @@ class GameViewModel : ViewModel() {
         val playerName = if (player == Player.P1) "P1" else "P2"
         when (card) {
             CardType.ATTACK_SMALL -> {
-                if (player == Player.P1) p1AttackBonus = 5 else p2AttackBonus = 5
-                addBattleLog("🃏 $playerName カード使用: ${card.title}")
+                if (player == Player.P1) {
+                    p1AttackBonus = 5
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 攻撃+5")
+                } else {
+                    p2AttackBonus = 5
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 攻撃+5")
+                }
             }
             CardType.ATTACK_MEDIUM -> {
-                if (player == Player.P1) p1AttackBonus = 10 else p2AttackBonus = 10
-                addBattleLog("🃏 $playerName カード使用: ${card.title}")
+                if (player == Player.P1) {
+                    p1AttackBonus = 10
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 攻撃+10")
+                } else {
+                    p2AttackBonus = 10
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 攻撃+10")
+                }
             }
             CardType.ATTACK_LARGE -> {
-                if (player == Player.P1) p1AttackMultiplier = 2.0 else p2AttackMultiplier = 2.0
-                addBattleLog("🃏 $playerName カード使用: ${card.title}")
+                if (player == Player.P1) {
+                    p1AttackMultiplier = 2.0
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 攻撃×2")
+                } else {
+                    p2AttackMultiplier = 2.0
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 攻撃×2")
+                }
             }
             CardType.DEFENSE_SMALL -> {
-                if (player == Player.P1) p1DefenseReduction = 5 else p2DefenseReduction = 5
-                addBattleLog("🃏 $playerName カード使用: ${card.title}")
+                if (player == Player.P1) {
+                    p1DefenseReduction = 5
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 防御+5")
+                } else {
+                    p2DefenseReduction = 5
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 防御+5")
+                }
             }
             CardType.DEFENSE_MEDIUM -> {
-                if (player == Player.P1) p1DefenseMultiplier = 0.5 else p2DefenseMultiplier = 0.5
-                addBattleLog("🃏 $playerName カード使用: ${card.title}")
+                if (player == Player.P1) {
+                    p1DefenseMultiplier = 0.5
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 防御×0.5")
+                } else {
+                    p2DefenseMultiplier = 0.5
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 防御×0.5")
+                }
             }
             CardType.DEFENSE_LARGE -> {
-                if (player == Player.P1) p1IsInvincible = true else p2IsInvincible = true
-                addBattleLog("🃏 $playerName カード使用: ${card.title}")
+                if (player == Player.P1) {
+                    p1IsInvincible = true
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 無敵付与")
+                } else {
+                    p2IsInvincible = true
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → 無敵付与")
+                }
             }
             CardType.HEAL_SMALL -> {
                 if (player == Player.P1) {
                     _p1Hp.value = (p1Hp.value + 10).coerceIn(0, 100)
-                    addBattleLog("💚 $playerName HP回復 +10 (残り: ${_p1Hp.value})")
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+10")
                 } else {
                     _p2Hp.value = (p2Hp.value + 10).coerceIn(0, 100)
-                    addBattleLog("💚 $playerName HP回復 +10 (残り: ${_p2Hp.value})")
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+10")
                 }
             }
             CardType.HEAL_MEDIUM -> {
                 if (player == Player.P1) {
                     _p1Hp.value = (p1Hp.value + 20).coerceIn(0, 100)
-                    addBattleLog("💚 $playerName HP回復 +20 (残り: ${_p1Hp.value})")
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+20")
                 } else {
                     _p2Hp.value = (p2Hp.value + 20).coerceIn(0, 100)
-                    addBattleLog("💚 $playerName HP回復 +20 (残り: ${_p2Hp.value})")
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+20")
                 }
             }
             CardType.HEAL_LARGE -> {
                 if (player == Player.P1) {
                     _p1Hp.value = (p1Hp.value + 30).coerceIn(0, 100)
-                    addBattleLog("💚 $playerName HP回復 +30 (残り: ${_p1Hp.value})")
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+30")
                 } else {
                     _p2Hp.value = (p2Hp.value + 30).coerceIn(0, 100)
-                    addBattleLog("💚 $playerName HP回復 +30 (残り: ${_p2Hp.value})")
+                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+30")
                 }
             }
             else -> {} // 補助系カードはここでは処理しない
