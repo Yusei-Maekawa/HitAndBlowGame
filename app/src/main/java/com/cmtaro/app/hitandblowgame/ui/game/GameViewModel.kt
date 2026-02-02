@@ -9,15 +9,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-enum class GamePhase { 
-    SETTING_P1, SETTING_P2, 
+enum class GamePhase {
+    SETTING_P1, SETTING_P2,
     CARD_SELECT_P1, CARD_SELECT_P2,  // ラウンド開始時のバフカード選択
     HAND_CONFIRM_P1, HAND_CONFIRM_P2,  // 手札確認フェーズ
     PLAYING,
     CARD_USE_P1, CARD_USE_P2,  // 手札カード使用フェーズ
     WAITING_P2_INPUT,  // P1入力完了、P2待ち
     REPLAYING,         // リプレイ中
-    FINISHED 
+    FINISHED
 }
 enum class Player { P1, P2 }
 
@@ -27,15 +27,15 @@ enum class CardType(val title: String, val description: String, val category: Ca
     ATTACK_SMALL("攻撃小", "次の攻撃 +5ダメージ", CardCategory.BUFF),
     ATTACK_MEDIUM("攻撃中", "次の攻撃 +10ダメージ", CardCategory.BUFF),
     ATTACK_LARGE("攻撃大", "次の攻撃 ×2倍", CardCategory.BUFF),
-    
+
     DEFENSE_SMALL("防御小", "次の自傷ダメージ-5", CardCategory.BUFF),
     DEFENSE_MEDIUM("防御中", "次の自傷ダメージ半減", CardCategory.BUFF),
     DEFENSE_LARGE("防御大", "次の自傷ダメージ無効", CardCategory.BUFF),
-    
+
     HEAL_SMALL("回復小", "HP +10回復", CardCategory.BUFF),
     HEAL_MEDIUM("回復中", "HP +20回復", CardCategory.BUFF),
     HEAL_LARGE("回復大", "HP +30回復", CardCategory.BUFF),
-    
+
     // 補助系（即時発動）
     COUNTER("反撃", "相手の次の攻撃を跳ね返す", CardCategory.SUPPORT),
     INVINCIBLE("無敵", "次のダメージを完全無効化", CardCategory.SUPPORT),
@@ -81,11 +81,11 @@ class GameViewModel : ViewModel() {
 
     private var p1Answer: String = ""
     private var p2Answer: String = ""
-    
+
     // 同時ターン制：各プレイヤーの入力を一時保存
     private var p1CurrentInput: String = ""
     private var p2CurrentInput: String = ""
-    
+
     // カード使用の記録
     private var p1UsedCard: CardType? = null
     private var p2UsedCard: CardType? = null
@@ -105,7 +105,7 @@ class GameViewModel : ViewModel() {
     // プレイヤーごとの手札（補助系カード）
     private val _p1HandCards = MutableStateFlow<List<CardType>>(emptyList())
     val p1HandCards = _p1HandCards.asStateFlow()
-    
+
     private val _p2HandCards = MutableStateFlow<List<CardType>>(emptyList())
     val p2HandCards = _p2HandCards.asStateFlow()
 
@@ -120,43 +120,43 @@ class GameViewModel : ViewModel() {
     private var p2AttackBonus = 0
     private var p1AttackMultiplier = 1.0
     private var p2AttackMultiplier = 1.0
-    
+
     private var p1DefenseReduction = 0
     private var p2DefenseReduction = 0
     private var p1DefenseMultiplier = 1.0
     private var p2DefenseMultiplier = 1.0
-    
+
     private var p1IsInvincible = false
     private var p2IsInvincible = false
     private var p1HasCounter = false
     private var p2HasCounter = false
-    
+
     private var p1HitBonus = 0
     private var p2HitBonus = 0
     private var p1BlowBonus = 0
     private var p2BlowBonus = 0
-    
+
     private val _lastDamageInfo = MutableStateFlow("")
     val lastDamageInfo = _lastDamageInfo.asStateFlow()
-    
+
     // プレイヤーのバフ・ステータス状態を監視可能に
     private val _p1StatusEffects = MutableStateFlow("")
     val p1StatusEffects = _p1StatusEffects.asStateFlow()
-    
+
     private val _p2StatusEffects = MutableStateFlow("")
     val p2StatusEffects = _p2StatusEffects.asStateFlow()
-    
+
     // バトルログ（アニメーション付き履歴表示用）
     private val _battleLog = MutableStateFlow<List<String>>(emptyList())
     val battleLog = _battleLog.asStateFlow()
-    
+
     // リプレイシステム用
     private val _replayMessage = MutableStateFlow("")
     val replayMessage = _replayMessage.asStateFlow()
-    
+
     private val _showReplayOverlay = MutableStateFlow(false)
     val showReplayOverlay = _showReplayOverlay.asStateFlow()
-    
+
     private val _showCardSelectDialog = MutableStateFlow(false)
     val showCardSelectDialog = _showCardSelectDialog.asStateFlow()
 
@@ -182,17 +182,20 @@ class GameViewModel : ViewModel() {
         // ラウンド開始時：まず数字設定から
         _phase.value = GamePhase.SETTING_P1
         addBattleLog("🎮 ラウンド${_currentRound.value} 開始！")
-        
+
         // 前ラウンドの手札を破棄
         if (_p1HandCards.value.isNotEmpty() || _p2HandCards.value.isNotEmpty()) {
             addBattleLog("🗑️ 前ラウンドの手札を破棄")
         }
-        
+
         // 手札を初期化（各ラウンド新しい手札）
         _p1HandCards.value = emptyList()
         _p2HandCards.value = emptyList()
+
+        // ターンカウントをリセット
+        _currentTurn.value = 1
     }
-    
+
     // バトルログに追加
     private fun addBattleLog(message: String) {
         _battleLog.value = _battleLog.value + message
@@ -239,17 +242,17 @@ class GameViewModel : ViewModel() {
         viewModelScope.launch {
             _phase.value = GamePhase.REPLAYING
             _showReplayOverlay.value = true
-            
+
             // P1の結果判定
             val p1Result = calculator.judge(p2Answer, p1CurrentInput)
             val p2Result = calculator.judge(p1Answer, p2CurrentInput)
-            
+
             // ステップ1: P1のカード使用表示
             if (p1UsedCard != null) {
                 _replayMessage.value = "🃏 P1 がカードを使用:\n【${p1UsedCard!!.title}】"
                 delay(1200)
             }
-            
+
             // ステップ2: P1の推測表示
             _replayMessage.value = buildString {
                 if (p1UsedCard != null) {
@@ -260,7 +263,7 @@ class GameViewModel : ViewModel() {
             }
             addBattleLog("🎯 P1 → $p1CurrentInput")
             delay(1200)
-            
+
             // ステップ3: P1の結果表示
             _replayMessage.value = buildString {
                 if (p1UsedCard != null) {
@@ -272,7 +275,7 @@ class GameViewModel : ViewModel() {
             }
             addBattleLog("   ${p1Result.hit}H / ${p1Result.blow}B")
             delay(1500)
-            
+
             // ステップ4: P2のカード使用表示
             if (p2UsedCard != null) {
                 _replayMessage.value = buildString {
@@ -283,7 +286,7 @@ class GameViewModel : ViewModel() {
                 }
                 delay(1200)
             }
-            
+
             // ステップ5: P2の推測表示
             _replayMessage.value = buildString {
                 if (p1UsedCard != null) appendLine("🃏 P1: ${p1UsedCard!!.title}")
@@ -297,7 +300,7 @@ class GameViewModel : ViewModel() {
             }
             addBattleLog("🎯 P2 → $p2CurrentInput")
             delay(1200)
-            
+
             // ステップ6: P2の結果表示
             _replayMessage.value = buildString {
                 if (p1UsedCard != null) appendLine("� P1: ${p1UsedCard!!.title}")
@@ -312,7 +315,7 @@ class GameViewModel : ViewModel() {
             }
             addBattleLog("   ${p2Result.hit}H / ${p2Result.blow}B")
             delay(1500)
-            
+
             // カードモードの場合、ダメージ計算を段階的に表示
             if (isCardMode) {
                 _replayMessage.value = buildString {
@@ -325,7 +328,7 @@ class GameViewModel : ViewModel() {
                     appendLine("⚔️ ダメージ計算中...")
                 }
                 delay(800)
-                
+
                 // P1のダメージ計算を表示
                 val p1DamageInfo = calculateDamagePreview(Player.P1, p1Result.hit, p1Result.blow)
                 _replayMessage.value = buildString {
@@ -336,11 +339,11 @@ class GameViewModel : ViewModel() {
                     appendLine(p1DamageInfo)
                 }
                 delay(1200)
-                
+
                 // P1の行動を処理
                 processPlayerAction(Player.P1, p1CurrentInput)
                 delay(800)
-                
+
                 // P2のダメージ計算を表示
                 val p2DamageInfo = calculateDamagePreview(Player.P2, p2Result.hit, p2Result.blow)
                 _replayMessage.value = buildString {
@@ -353,11 +356,11 @@ class GameViewModel : ViewModel() {
                     appendLine(p2DamageInfo)
                 }
                 delay(1200)
-                
+
                 // P2の行動を処理
                 processPlayerAction(Player.P2, p2CurrentInput)
                 delay(800)
-                
+
                 // 状態異常の表示
                 val statusSummary = buildStatusSummary()
                 if (statusSummary.isNotEmpty()) {
@@ -376,16 +379,16 @@ class GameViewModel : ViewModel() {
                 processPlayerAction(Player.P2, p2CurrentInput)
                 delay(1000)
             }
-            
+
             // リプレイ完了
             finishReplay()
         }
     }
-    
+
     // 状態異常のサマリーを構築
     private fun buildStatusSummary(): String {
         val parts = mutableListOf<String>()
-        
+
         // P1の状態異常
         val p1Status = mutableListOf<String>()
         if (p1AttackBonus > 0) p1Status.add("攻撃+${p1AttackBonus}")
@@ -395,11 +398,11 @@ class GameViewModel : ViewModel() {
         if (p1IsInvincible) p1Status.add("無敵")
         if (p1HitBonus > 0) p1Status.add("Hit+${p1HitBonus}")
         if (p1BlowBonus > 0) p1Status.add("Blow+${p1BlowBonus}")
-        
+
         if (p1Status.isNotEmpty()) {
             parts.add("【P1】${p1Status.joinToString(", ")}")
         }
-        
+
         // P2の状態異常
         val p2Status = mutableListOf<String>()
         if (p2AttackBonus > 0) p2Status.add("攻撃+${p2AttackBonus}")
@@ -409,14 +412,16 @@ class GameViewModel : ViewModel() {
         if (p2IsInvincible) p2Status.add("無敵")
         if (p2HitBonus > 0) p2Status.add("Hit+${p2HitBonus}")
         if (p2BlowBonus > 0) p2Status.add("Blow+${p2BlowBonus}")
-        
+
         if (p2Status.isNotEmpty()) {
             parts.add("【P2】${p2Status.joinToString(", ")}")
         }
-        
+
         return parts.joinToString("\n")
     }
-    
+
+    private var roundWinner: Player? = null
+
     private fun processPlayerAction(player: Player, input: String) {
         val target = if (player == Player.P1) p2Answer else p1Answer
         val result = calculator.judge(target, input)
@@ -437,17 +442,11 @@ class GameViewModel : ViewModel() {
                 _phase.value = GamePhase.FINISHED
                 return
             }
-            
-            // 3ヒット（正解）した場合：ラウンド終了、次のラウンドへ
+
+            // 3ヒット（正解）した場合：ラウンド終了フラグを立てる
             if (result.hit == digitCount) {
-                _currentRound.value += 1
-                addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value - 1} 終了")
-                // 次のラウンド開始
-                viewModelScope.launch {
-                    delay(1500)
-                    startNewRound()
-                }
-                return
+                roundWinner = player
+                addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value} 終了")
             }
         } else {
             // 通常モード（digitCount分のヒットで即終了：3桁なら3hit、4桁なら4hit）
@@ -457,22 +456,77 @@ class GameViewModel : ViewModel() {
             }
         }
     }
-    
+
     private fun finishReplay() {
-        // カード使用記録をクリア
+        // カード使用記録をクリア（使用したターンのみ）
         p1UsedCard = null
         p2UsedCard = null
-        
+
+        // 手札カード効果を1ターン後にクリア
+        clearOneTimeCardEffects()
+
         // リプレイ完了処理
         if (_winner.value == null && _phase.value != GamePhase.FINISHED) {
-            // 次のターン準備
-            _phase.value = GamePhase.PLAYING
-            _currentPlayer.value = Player.P1
-            p1CurrentInput = ""
-            p2CurrentInput = ""
+            // ラウンド終了チェック
+            if (roundWinner != null) {
+                // 3hitされたプレイヤーがいる場合、次のラウンドへ
+                _currentRound.value += 1
+                roundWinner = null
+
+                // Answerとログをリセット
+                p1Answer = ""
+                p2Answer = ""
+                _p1Logs.value = emptyList()
+                _p2Logs.value = emptyList()
+
+                viewModelScope.launch {
+                    delay(1500)
+                    startNewRound()
+                }
+            } else {
+                // 通常のターン継続
+                _phase.value = GamePhase.PLAYING
+                _currentPlayer.value = Player.P1
+                p1CurrentInput = ""
+                p2CurrentInput = ""
+
+                // ターン数をインクリメント
+                _currentTurn.value += 1
+            }
         }
-        
+
         _showReplayOverlay.value = false
+    }
+
+    // 1ターン限定の手札カード効果をクリア
+    private fun clearOneTimeCardEffects() {
+        // 攻撃バフは使用後即クリア（既にcalculateCardModeDamageでクリアされている）
+        // 以下は念のため確認してクリア
+        p1AttackBonus = 0
+        p2AttackBonus = 0
+        p1AttackMultiplier = 1.0
+        p2AttackMultiplier = 1.0
+
+        // 防御系は使用されなければクリア
+        p1DefenseReduction = 0
+        p2DefenseReduction = 0
+        p1DefenseMultiplier = 1.0
+        p2DefenseMultiplier = 1.0
+
+        // 無敵と反撃は1ターンで消える
+        p1IsInvincible = false
+        p2IsInvincible = false
+        p1HasCounter = false
+        p2HasCounter = false
+
+        // Hit/Blowボーナスも使用後クリア（既にクリアされているが念のため）
+        p1HitBonus = 0
+        p2HitBonus = 0
+        p1BlowBonus = 0
+        p2BlowBonus = 0
+
+        // ステータス表示を更新
+        updateStatusEffects()
     }
 
     // カードバトルの特殊ルール
@@ -489,7 +543,7 @@ class GameViewModel : ViewModel() {
             bonusDamage += hit * p2HitBonus
             p2HitBonus = 0
         }
-        
+
         if (current == Player.P1 && p1BlowBonus > 0 && blow > 0) {
             bonusDamage += blow * p1BlowBonus
             p1BlowBonus = 0
@@ -511,11 +565,11 @@ class GameViewModel : ViewModel() {
             val p1Result = calculator.judge(p2Answer, p1CurrentInput)
             val p2Result = calculator.judge(p1Answer, p2CurrentInput)
             val bothCorrect = p1Result.hit == digitCount && p2Result.hit == digitCount
-            
+
             if (bothCorrect) {
                 // 【両者同時正解】→ 自分の数字の合計ダメージを自分が受ける
                 val selfDamage = myAnswer.map { it.digitToInt() }.sum()
-                
+
                 if (current == Player.P1) {
                     _p1Hp.value = (p1Hp.value - selfDamage).coerceIn(0, 100)
                     damageLog = "両者正解！P1は自分の数字でダメージ -${selfDamage}"
@@ -531,10 +585,10 @@ class GameViewModel : ViewModel() {
                 val digits = myAnswer.map { it.digitToInt() }
                 val baseAttack = digits.sum()
                 var attackDamage = 0
-                
+
                 // 基礎ダメージの計算式を作成 (例: 2+3+4=9)
                 val baseDamageFormula = "${digits.joinToString("+")}=$baseAttack"
-                
+
                 // 攻撃バフを適用
                 if (current == Player.P1) {
                     attackDamage = ((baseAttack + p1AttackBonus) * p1AttackMultiplier).toInt()
@@ -543,7 +597,7 @@ class GameViewModel : ViewModel() {
                     val effectText = " [($baseDamageFormula)$bonusText$multiplierText]"
                     p1AttackBonus = 0
                     p1AttackMultiplier = 1.0
-                    
+
                     // 反撃チェック
                     if (p2HasCounter) {
                         _p1Hp.value = (p1Hp.value - attackDamage).coerceIn(0, 100)
@@ -562,7 +616,7 @@ class GameViewModel : ViewModel() {
                     val effectText = " [($baseDamageFormula)$bonusText$multiplierText]"
                     p2AttackBonus = 0
                     p2AttackMultiplier = 1.0
-                    
+
                     // 反撃チェック
                     if (p1HasCounter) {
                         _p2Hp.value = (p2Hp.value - attackDamage).coerceIn(0, 100)
@@ -600,7 +654,7 @@ class GameViewModel : ViewModel() {
         // 死亡チェック
         if (_p1Hp.value <= 0) _winner.value = Player.P2
         if (_p2Hp.value <= 0) _winner.value = Player.P1
-        
+
         // ステータス効果を更新
         updateStatusEffects()
     }
@@ -615,14 +669,14 @@ class GameViewModel : ViewModel() {
     // カードを選んだ時の処理
     fun onCardSelected(player: Player, card: CardType) {
         val playerName = if (player == Player.P1) "P1" else "P2"
-        
+
         if (card.category == CardCategory.BUFF) {
             // バフ系カード：即時効果を適用
             applyBuffCard(player, card)
-            
+
             // カード選択をログに記録
             addBattleLog("🃏 $playerName が「${card.title}」を選択")
-            
+
             // P1が選択完了したら手札配布＆確認へ、P2が完了したら手札配布＆確認へ
             when (_phase.value) {
                 GamePhase.CARD_SELECT_P1 -> {
@@ -638,15 +692,15 @@ class GameViewModel : ViewModel() {
                 else -> {}
             }
         }
-        
+
         _availableCards.value = emptyList()
     }
-    
+
     // 手札カードを配布（各ラウンド3枚、1回限り）
     private fun distributeHandCards(player: Player) {
         val supportCards = CardType.values().filter { it.category == CardCategory.SUPPORT }
         val newCards = supportCards.shuffled().take(3)
-        
+
         if (player == Player.P1) {
             _p1HandCards.value = newCards
             addBattleLog("🎴 P1 が手札カードを3枚獲得")
@@ -655,7 +709,7 @@ class GameViewModel : ViewModel() {
             addBattleLog("🎴 P2 が手札カードを3枚獲得")
         }
     }
-    
+
     // 手札確認完了
     fun confirmHandCards() {
         when (_phase.value) {
@@ -671,7 +725,7 @@ class GameViewModel : ViewModel() {
             else -> {}
         }
     }
-    
+
     // バフカードの効果を適用
     private fun applyBuffCard(player: Player, card: CardType) {
         val playerName = if (player == Player.P1) "P1" else "P2"
@@ -761,18 +815,18 @@ class GameViewModel : ViewModel() {
         }
         updateStatusEffects() // ステータス更新
     }
-    
+
     // 補助系カードを使用する
     fun useHandCard(player: Player, card: CardType) {
         val playerName = if (player == Player.P1) "P1" else "P2"
-        
+
         // カード使用を記録
         if (player == Player.P1) {
             p1UsedCard = card
         } else {
             p2UsedCard = card
         }
-        
+
         when (card) {
             CardType.COUNTER -> {
                 if (player == Player.P1) p1HasCounter = true else p2HasCounter = true
@@ -807,7 +861,7 @@ class GameViewModel : ViewModel() {
             }
             else -> {}
         }
-        
+
         // 手札から削除
         if (player == Player.P1) {
             _p1HandCards.value = _p1HandCards.value.filter { it != card }
@@ -815,7 +869,7 @@ class GameViewModel : ViewModel() {
             _p2HandCards.value = _p2HandCards.value.filter { it != card }
         }
         updateStatusEffects() // ステータス更新
-        
+
         // カード使用後、次のフェーズへ
         when (_phase.value) {
             GamePhase.CARD_USE_P1 -> {
@@ -828,7 +882,7 @@ class GameViewModel : ViewModel() {
             else -> {}
         }
     }
-    
+
     // ステータス効果を文字列化して表示用に更新
     private fun updateStatusEffects() {
         val p1Effects = mutableListOf<String>()
@@ -840,7 +894,7 @@ class GameViewModel : ViewModel() {
         if (p1HasCounter) p1Effects.add("反撃")
         if (p1HitBonus > 0) p1Effects.add("Hit×${p1HitBonus}")
         if (p1BlowBonus > 0) p1Effects.add("Blow×${p1BlowBonus}")
-        
+
         val p2Effects = mutableListOf<String>()
         if (p2AttackBonus > 0) p2Effects.add("攻撃+${p2AttackBonus}")
         if (p2AttackMultiplier > 1.0) p2Effects.add("攻撃×${p2AttackMultiplier}")
@@ -850,29 +904,29 @@ class GameViewModel : ViewModel() {
         if (p2HasCounter) p2Effects.add("反撃")
         if (p2HitBonus > 0) p2Effects.add("Hit×${p2HitBonus}")
         if (p2BlowBonus > 0) p2Effects.add("Blow×${p2BlowBonus}")
-        
+
         _p1StatusEffects.value = if (p1Effects.isEmpty()) "" else p1Effects.joinToString(" | ")
         _p2StatusEffects.value = if (p2Effects.isEmpty()) "" else p2Effects.joinToString(" | ")
     }
-    
+
     // リプレイ用：ダメージの事前計算と表示テキスト生成
     private fun calculateDamagePreview(player: Player, hit: Int, blow: Int): String {
         val myAnswer = if (player == Player.P1) p1Answer else p2Answer
         val playerName = if (player == Player.P1) "P1" else "P2"
         val targetName = if (player == Player.P1) "P2" else "P1"
-        
+
         // 1. 0 Hit 0 Blow → ダメージなし
         if (hit == 0 && blow == 0) {
             return "➖ $playerName → ダメージなし"
         }
-        
+
         // 2. 正解（全Hit）→ 同時正解チェック
         if (hit == digitCount) {
             // 相手も正解しているかチェック
             val p1Result = calculator.judge(p2Answer, p1CurrentInput)
             val p2Result = calculator.judge(p1Answer, p2CurrentInput)
             val bothCorrect = p1Result.hit == digitCount && p2Result.hit == digitCount
-            
+
             if (bothCorrect) {
                 // 【両者同時正解】→ 自分の数字の合計ダメージを自分が受ける
                 val digits = myAnswer.map { it.digitToInt() }
@@ -882,7 +936,7 @@ class GameViewModel : ViewModel() {
                 val newHp = (currentHp - selfDamage).coerceIn(0, 100)
                 return "💥 両者正解！ $playerName → 自分 -${selfDamage} HP [($damageFormula)] (${currentHp} → ${newHp})"
             }
-            
+
             // 【通常の攻撃】片方だけ正解
             val digits = myAnswer.map { it.digitToInt() }
             val baseAttack = digits.sum()
@@ -891,22 +945,22 @@ class GameViewModel : ViewModel() {
             val attackMultiplier = if (player == Player.P1) p1AttackMultiplier else p2AttackMultiplier
             val hitBonus = if (player == Player.P1) p1HitBonus else p2HitBonus
             val blowBonus = if (player == Player.P1) p1BlowBonus else p2BlowBonus
-            
+
             var bonusDamage = 0
             if (hitBonus > 0 && hit > 0) bonusDamage += hit * hitBonus
             if (blowBonus > 0 && blow > 0) bonusDamage += blow * blowBonus
-            
+
             val attackDamage = ((baseAttack + attackBonus) * attackMultiplier).toInt()
             val totalDamage = attackDamage + bonusDamage
-            
+
             // 効果テキストの作成
             val multiplierText = if (attackMultiplier > 1.0) " ×${attackMultiplier}" else ""
             val bonusText = if (attackBonus > 0) " +${attackBonus}" else ""
             val effectText = " [($baseDamageFormula)$bonusText$multiplierText]"
-            
+
             // 反撃チェック
             val hasCounter = if (player == Player.P1) p2HasCounter else p1HasCounter
-            
+
             if (hasCounter) {
                 val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
                 val newHp = (currentHp - attackDamage).coerceIn(0, 100)
@@ -914,26 +968,26 @@ class GameViewModel : ViewModel() {
             } else {
                 val targetHp = if (player == Player.P1) p2Hp.value else p1Hp.value
                 val newHp = (targetHp - totalDamage).coerceIn(0, 100)
-                
+
                 val bonusDamageText = if (bonusDamage > 0) " (+${bonusDamage})" else ""
                 return "⚔️ $playerName → $targetName -${totalDamage} HP$effectText$bonusDamageText (${targetHp} → ${newHp})"
             }
         }
-        
+
         // 3. Hit/Blow（正解以外）→ ダメージなし（カード効果がある場合は追加ダメージのみ）
         val hitBonus = if (player == Player.P1) p1HitBonus else p2HitBonus
         val blowBonus = if (player == Player.P1) p1BlowBonus else p2BlowBonus
-        
+
         var bonusDamage = 0
         if (hitBonus > 0 && hit > 0) bonusDamage += hit * hitBonus
         if (blowBonus > 0 && blow > 0) bonusDamage += blow * blowBonus
-        
+
         if (bonusDamage > 0) {
             val targetHp = if (player == Player.P1) p2Hp.value else p1Hp.value
             val newHp = (targetHp - bonusDamage).coerceIn(0, 100)
             return "✨ $playerName Hit/Blowボーナス → $targetName -${bonusDamage} HP (${targetHp} → ${newHp})"
         }
-        
+
         return "➖ $playerName → ダメージなし (${hit}H ${blow}B)"
     }
 
@@ -957,11 +1011,11 @@ class GameViewModel : ViewModel() {
             else -> {}
         }
     }
-    
+
     fun confirmCardUsePhase() {
         _showHandCardDialog.value = true
     }
-    
+
     fun dismissCardUseDialog() {
         _showHandCardDialog.value = false
     }
