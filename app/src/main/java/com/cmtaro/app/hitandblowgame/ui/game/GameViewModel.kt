@@ -368,7 +368,7 @@ class GameViewModel : ViewModel() {
         val myAnswer = if (current == Player.P1) p1Answer else p2Answer
         var damageLog = ""
 
-        // Hit/Blowボーナスダメージ
+        // Hit/Blowボーナスダメージ（カード効果がある場合のみ）
         var bonusDamage = 0
         if (current == Player.P1 && p1HitBonus > 0 && hit > 0) {
             bonusDamage += hit * p1HitBonus
@@ -386,87 +386,94 @@ class GameViewModel : ViewModel() {
             p2BlowBonus = 0
         }
 
-        // 1. 【自傷ダメージ】
+        // 1. 【0 Hit 0 Blow】→ ダメージなし（自傷ダメージ廃止）
         if (hit == 0 && blow == 0) {
-            val isInvincible = if (current == Player.P1) p1IsInvincible else p2IsInvincible
-            if (!isInvincible) {
-                var selfDamage = myAnswer.map { it.digitToInt() }.sum()
-                
-                // 防御バフを適用
-                if (current == Player.P1) {
-                    selfDamage = ((selfDamage - p1DefenseReduction) * p1DefenseMultiplier).toInt().coerceAtLeast(0)
-                    p1DefenseReduction = 0
-                    p1DefenseMultiplier = 1.0
-                } else {
-                    selfDamage = ((selfDamage - p2DefenseReduction) * p2DefenseMultiplier).toInt().coerceAtLeast(0)
-                    p2DefenseReduction = 0
-                    p2DefenseMultiplier = 1.0
-                }
+            damageLog = "${current.name}はダメージなし"
+            addBattleLog("➖ ${current.name} ダメージなし")
+            return
+        }
+
+        // 2. 【攻撃ダメージ】正解時のみ
+        if (hit == digitCount) {
+            // 相手も正解しているかチェック（同時正解の特殊処理）
+            val p1Result = calculator.judge(p2Answer, p1CurrentInput)
+            val p2Result = calculator.judge(p1Answer, p2CurrentInput)
+            val bothCorrect = p1Result.hit == digitCount && p2Result.hit == digitCount
+            
+            if (bothCorrect) {
+                // 【両者同時正解】→ 自分の数字の合計ダメージを自分が受ける
+                val selfDamage = myAnswer.map { it.digitToInt() }.sum()
                 
                 if (current == Player.P1) {
                     _p1Hp.value = (p1Hp.value - selfDamage).coerceIn(0, 100)
-                    damageLog = "P1が自傷ダメージ -$selfDamage"
-                    addBattleLog("💔 P1 自傷 -$selfDamage HP (残り: ${_p1Hp.value})")
+                    damageLog = "両者正解！P1は自分の数字でダメージ -${selfDamage}"
+                    addBattleLog("💥 両者正解！P1 → 自分 -${selfDamage} HP (残り: ${_p1Hp.value})")
                 } else {
                     _p2Hp.value = (p2Hp.value - selfDamage).coerceIn(0, 100)
-                    damageLog = "P2が自傷ダメージ -$selfDamage"
-                    addBattleLog("💔 P2 自傷 -$selfDamage HP (残り: ${_p2Hp.value})")
+                    damageLog = "両者正解！P2は自分の数字でダメージ -${selfDamage}"
+                    addBattleLog("💥 両者正解！P2 → 自分 -${selfDamage} HP (残り: ${_p2Hp.value})")
                 }
             } else {
-                damageLog = "${current.name}は無敵状態で自傷を無効化！"
-                addBattleLog("✨ ${current.name} 無敵発動！")
-            }
-            // 効果を使ったらリセット
-            if (current == Player.P1) p1IsInvincible = false else p2IsInvincible = false
-        }
-
-        // 2. 【攻撃ダメージ】
-        if (hit == digitCount) {
-            val baseAttack = guess.map { it.digitToInt() }.sum()
-            var attackDamage = 0
-            
-            // 攻撃バフを適用
-            if (current == Player.P1) {
-                attackDamage = ((baseAttack + p1AttackBonus) * p1AttackMultiplier).toInt()
-                val multiplierText = if (p1AttackMultiplier > 1.0) " (×${p1AttackMultiplier})" else ""
-                val bonusText = if (p1AttackBonus > 0) " (+${p1AttackBonus})" else ""
-                p1AttackBonus = 0
-                p1AttackMultiplier = 1.0
+                // 【通常の攻撃】片方だけ正解
+                val baseAttack = guess.map { it.digitToInt() }.sum()
+                var attackDamage = 0
                 
-                // 反撃チェック
-                if (p2HasCounter) {
-                    _p1Hp.value = (p1Hp.value - attackDamage).coerceIn(0, 100)
-                    damageLog = "P2の反撃！P1に${attackDamage}ダメージ${multiplierText}${bonusText}"
-                    addBattleLog("🔄 P2 反撃！ → P1 -${attackDamage} HP (残り: ${_p1Hp.value})")
-                    p2HasCounter = false
+                // 攻撃バフを適用
+                if (current == Player.P1) {
+                    attackDamage = ((baseAttack + p1AttackBonus) * p1AttackMultiplier).toInt()
+                    val multiplierText = if (p1AttackMultiplier > 1.0) " (×${p1AttackMultiplier})" else ""
+                    val bonusText = if (p1AttackBonus > 0) " (+${p1AttackBonus})" else ""
+                    p1AttackBonus = 0
+                    p1AttackMultiplier = 1.0
+                    
+                    // 反撃チェック
+                    if (p2HasCounter) {
+                        _p1Hp.value = (p1Hp.value - attackDamage).coerceIn(0, 100)
+                        damageLog = "P2の反撃！P1に${attackDamage}ダメージ${multiplierText}${bonusText}"
+                        addBattleLog("🔄 P2 反撃！ → P1 -${attackDamage} HP (残り: ${_p1Hp.value})")
+                        p2HasCounter = false
+                    } else {
+                        _p2Hp.value = (p2Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
+                        damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
+                        addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP (残り: ${_p2Hp.value})")
+                    }
                 } else {
-                    _p2Hp.value = (p2Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
-                    damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
-                    addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP (残り: ${_p2Hp.value})")
+                    attackDamage = ((baseAttack + p2AttackBonus) * p2AttackMultiplier).toInt()
+                    val multiplierText = if (p2AttackMultiplier > 1.0) " (×${p2AttackMultiplier})" else ""
+                    val bonusText = if (p2AttackBonus > 0) " (+${p2AttackBonus})" else ""
+                    p2AttackBonus = 0
+                    p2AttackMultiplier = 1.0
+                    
+                    // 反撃チェック
+                    if (p1HasCounter) {
+                        _p2Hp.value = (p2Hp.value - attackDamage).coerceIn(0, 100)
+                        damageLog = "P1の反撃！P2に${attackDamage}ダメージ${multiplierText}${bonusText}"
+                        addBattleLog("🔄 P1 反撃！ → P2 -${attackDamage} HP (残り: ${_p2Hp.value})")
+                        p1HasCounter = false
+                    } else {
+                        _p1Hp.value = (p1Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
+                        damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
+                        addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP (残り: ${_p1Hp.value})")
+                    }
+                }
+            }
+        } else if (hit > 0 || blow > 0) {
+            // 3. 【Hit/Blow（正解以外）】→ ダメージなし（カード効果がある場合は追加ダメージのみ）
+            if (bonusDamage > 0) {
+                // Hit/Blowボーナスカードの効果がある場合のみダメージ
+                if (current == Player.P1) {
+                    _p2Hp.value = (p2Hp.value - bonusDamage).coerceIn(0, 100)
+                    damageLog = "P1のHit/Blowボーナス！P2に${bonusDamage}ダメージ"
+                    addBattleLog("✨ P1 Hit/Blowボーナス → P2 -${bonusDamage} HP (残り: ${_p2Hp.value})")
+                } else {
+                    _p1Hp.value = (p1Hp.value - bonusDamage).coerceIn(0, 100)
+                    damageLog = "P2のHit/Blowボーナス！P1に${bonusDamage}ダメージ"
+                    addBattleLog("✨ P2 Hit/Blowボーナス → P1 -${bonusDamage} HP (残り: ${_p1Hp.value})")
                 }
             } else {
-                attackDamage = ((baseAttack + p2AttackBonus) * p2AttackMultiplier).toInt()
-                val multiplierText = if (p2AttackMultiplier > 1.0) " (×${p2AttackMultiplier})" else ""
-                val bonusText = if (p2AttackBonus > 0) " (+${p2AttackBonus})" else ""
-                p2AttackBonus = 0
-                p2AttackMultiplier = 1.0
-                
-                // 反撃チェック
-                if (p1HasCounter) {
-                    _p2Hp.value = (p2Hp.value - attackDamage).coerceIn(0, 100)
-                    damageLog = "P1の反撃！P2に${attackDamage}ダメージ${multiplierText}${bonusText}"
-                    addBattleLog("🔄 P1 反撃！ → P2 -${attackDamage} HP (残り: ${_p2Hp.value})")
-                    p1HasCounter = false
-                } else {
-                    _p1Hp.value = (p1Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
-                    damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}${multiplierText}${bonusText}"
-                    addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP (残り: ${_p1Hp.value})")
-                }
+                damageLog = "${current.name}はダメージなし (${hit}H ${blow}B)"
+                addBattleLog("➖ ${current.name} ダメージなし (${hit}H ${blow}B)")
             }
-        }
-
-        if (bonusDamage > 0 && hit != digitCount) {
-            damageLog += " (Hit/Blowボーナス +$bonusDamage)"
         }
 
         _lastDamageInfo.value = damageLog
@@ -672,28 +679,28 @@ class GameViewModel : ViewModel() {
         val playerName = if (player == Player.P1) "P1" else "P2"
         val targetName = if (player == Player.P1) "P2" else "P1"
         
-        // 0 Hit 0 Blow の場合：自傷ダメージ
+        // 1. 0 Hit 0 Blow → ダメージなし
         if (hit == 0 && blow == 0) {
-            val isInvincible = if (player == Player.P1) p1IsInvincible else p2IsInvincible
-            if (isInvincible) {
-                return "✨ 無敵効果で自傷ダメージ無効！"
-            }
-            
-            var selfDamage = myAnswer.map { it.digitToInt() }.sum()
-            val defReduction = if (player == Player.P1) p1DefenseReduction else p2DefenseReduction
-            val defMultiplier = if (player == Player.P1) p1DefenseMultiplier else p2DefenseMultiplier
-            
-            selfDamage = ((selfDamage - defReduction) * defMultiplier).toInt().coerceAtLeast(0)
-            
-            val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
-            val newHp = (currentHp - selfDamage).coerceIn(0, 100)
-            
-            return "💔 $playerName → 自分 -${selfDamage} HP (${currentHp} → ${newHp})"
+            return "➖ $playerName → ダメージなし"
         }
         
-        // 正解以外：攻撃ダメージ
-        if (hit != digitCount) {
-            val baseAttack = 10
+        // 2. 正解（全Hit）→ 同時正解チェック
+        if (hit == digitCount) {
+            // 相手も正解しているかチェック
+            val p1Result = calculator.judge(p2Answer, p1CurrentInput)
+            val p2Result = calculator.judge(p1Answer, p2CurrentInput)
+            val bothCorrect = p1Result.hit == digitCount && p2Result.hit == digitCount
+            
+            if (bothCorrect) {
+                // 【両者同時正解】→ 自分の数字の合計ダメージを自分が受ける
+                val selfDamage = myAnswer.map { it.digitToInt() }.sum()
+                val currentHp = if (player == Player.P1) p1Hp.value else p2Hp.value
+                val newHp = (currentHp - selfDamage).coerceIn(0, 100)
+                return "💥 両者正解！ $playerName → 自分 -${selfDamage} HP (${currentHp} → ${newHp})"
+            }
+            
+            // 【通常の攻撃】片方だけ正解
+            val baseAttack = myAnswer.map { it.digitToInt() }.sum()
             val attackBonus = if (player == Player.P1) p1AttackBonus else p2AttackBonus
             val attackMultiplier = if (player == Player.P1) p1AttackMultiplier else p2AttackMultiplier
             val hitBonus = if (player == Player.P1) p1HitBonus else p2HitBonus
@@ -722,6 +729,20 @@ class GameViewModel : ViewModel() {
             }
         }
         
-        return "🎯 正解！ ダメージなし"
+        // 3. Hit/Blow（正解以外）→ ダメージなし（カード効果がある場合は追加ダメージのみ）
+        val hitBonus = if (player == Player.P1) p1HitBonus else p2HitBonus
+        val blowBonus = if (player == Player.P1) p1BlowBonus else p2BlowBonus
+        
+        var bonusDamage = 0
+        if (hitBonus > 0 && hit > 0) bonusDamage += hit * hitBonus
+        if (blowBonus > 0 && blow > 0) bonusDamage += blow * blowBonus
+        
+        if (bonusDamage > 0) {
+            val targetHp = if (player == Player.P1) p2Hp.value else p1Hp.value
+            val newHp = (targetHp - bonusDamage).coerceIn(0, 100)
+            return "✨ $playerName Hit/Blowボーナス → $targetName -${bonusDamage} HP (${targetHp} → ${newHp})"
+        }
+        
+        return "➖ $playerName → ダメージなし (${hit}H ${blow}B)"
     }
 }
