@@ -210,9 +210,9 @@ class GameViewModel : ViewModel() {
             }
             GamePhase.SETTING_P2 -> {
                 p2Answer = input
-                // P2の数字設定後、ゲーム開始（P1のターン）
-                _phase.value = GamePhase.PLAYING
-                _currentPlayer.value = Player.P1
+                // P2の数字設定後、カード選択へ
+                _phase.value = GamePhase.CARD_SELECT_P2
+                prepareRoundStartCards()
             }
             GamePhase.PLAYING -> {
                 // P1の入力後、手札カード使用フェーズへ
