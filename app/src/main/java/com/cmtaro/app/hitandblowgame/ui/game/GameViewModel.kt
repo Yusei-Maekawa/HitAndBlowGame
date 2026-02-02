@@ -343,8 +343,16 @@ class GameViewModel : ViewModel() {
                     CardType.HEAL_LARGE -> 30
                     else -> 0
                 }
+                
+                // リプレイ中にHPを変更（演出前に実行）
+                if (player == Player.P1) {
+                    _p1Hp.value = (p1Hp.value + healAmount).coerceIn(0, 100)
+                } else {
+                    _p2Hp.value = (p2Hp.value + healAmount).coerceIn(0, 100)
+                }
+                
                 _replayEffect.value = ReplayEffect(EffectType.HEAL, player, null, healAmount)
-                delay(800)
+                delay(1000)
             }
             CardType.INVINCIBLE -> {
                 _replayEffect.value = ReplayEffect(EffectType.BARRIER, player, null, 0)
@@ -362,11 +370,7 @@ class GameViewModel : ViewModel() {
                     10.coerceAtMost(p1Hp.value)
                 }
                 
-                // HP吸収のエフェクトを表示
-                _replayEffect.value = ReplayEffect(EffectType.STEAL_HP, player, targetPlayer, stealAmount)
-                delay(800)
-                
-                // リプレイ中にHPを変更
+                // リプレイ中にHPを変更（演出前に実行）
                 if (player == Player.P1) {
                     _p2Hp.value = (p2Hp.value - stealAmount).coerceIn(0, 100)
                     _p1Hp.value = (p1Hp.value + stealAmount).coerceIn(0, 100)
@@ -374,6 +378,10 @@ class GameViewModel : ViewModel() {
                     _p1Hp.value = (p1Hp.value - stealAmount).coerceIn(0, 100)
                     _p2Hp.value = (p2Hp.value + stealAmount).coerceIn(0, 100)
                 }
+                
+                // HP吸収のエフェクトを表示
+                _replayEffect.value = ReplayEffect(EffectType.STEAL_HP, player, targetPlayer, stealAmount)
+                delay(1000)
             }
             else -> {
                 // 攻撃バフなどは視覚的なエフェクトなし
@@ -796,32 +804,9 @@ class GameViewModel : ViewModel() {
                     addBattleLog("🃏 $playerName カード使用: ${card.title} → 無敵付与")
                 }
             }
-            CardType.HEAL_SMALL -> {
-                if (player == Player.P1) {
-                    _p1Hp.value = (p1Hp.value + 10).coerceIn(0, 100)
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+10")
-                } else {
-                    _p2Hp.value = (p2Hp.value + 10).coerceIn(0, 100)
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+10")
-                }
-            }
-            CardType.HEAL_MEDIUM -> {
-                if (player == Player.P1) {
-                    _p1Hp.value = (p1Hp.value + 20).coerceIn(0, 100)
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+20")
-                } else {
-                    _p2Hp.value = (p2Hp.value + 20).coerceIn(0, 100)
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+20")
-                }
-            }
-            CardType.HEAL_LARGE -> {
-                if (player == Player.P1) {
-                    _p1Hp.value = (p1Hp.value + 30).coerceIn(0, 100)
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+30")
-                } else {
-                    _p2Hp.value = (p2Hp.value + 30).coerceIn(0, 100)
-                    addBattleLog("🃏 $playerName カード使用: ${card.title} → HP+30")
-                }
+            CardType.HEAL_SMALL, CardType.HEAL_MEDIUM, CardType.HEAL_LARGE -> {
+                // HP変更はリプレイ時にshowCardEffect内で実行されるため、ここでは何もしない
+                addBattleLog("🃏 $playerName カード使用: ${card.title}")
             }
             else -> {} // 補助系カードはここでは処理しない
         }

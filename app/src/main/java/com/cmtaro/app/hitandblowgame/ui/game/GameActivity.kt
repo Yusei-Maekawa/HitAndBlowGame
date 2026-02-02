@@ -612,15 +612,20 @@ class GameActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val targetView = if (player == Player.P1) binding.layoutP1Status else binding.layoutP2Status
             
+            // 既存のアニメーションをキャンセル
+            binding.textFloatingDamage.animate().cancel()
+            binding.textFloatingDamage.clearAnimation()
+            
             val location = IntArray(2)
             targetView.getLocationOnScreen(location)
             
             // 結果テキストを表示
             binding.textFloatingDamage.text = "$hit Hit / $blow Blow"
             binding.textFloatingDamage.setTextColor(Color.parseColor("#FFD700"))
-            binding.textFloatingDamage.textSize = 28f
+            binding.textFloatingDamage.textSize = 32f
+            binding.textFloatingDamage.translationY = 0f
             binding.textFloatingDamage.x = location[0].toFloat() + (targetView.width / 2) - 150
-            binding.textFloatingDamage.y = location[1].toFloat() + targetView.height / 2 - 50
+            binding.textFloatingDamage.y = location[1].toFloat() - 100
             binding.textFloatingDamage.visibility = View.VISIBLE
             binding.textFloatingDamage.alpha = 0f
             binding.textFloatingDamage.scaleX = 0.5f
@@ -628,26 +633,27 @@ class GameActivity : AppCompatActivity() {
             
             // フェードイン＆拡大
             val fadeIn = ObjectAnimator.ofFloat(binding.textFloatingDamage, "alpha", 0f, 1f)
-            val scaleUpX = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleX", 0.5f, 1.2f, 1f)
-            val scaleUpY = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleY", 0.5f, 1.2f, 1f)
+            val scaleUpX = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleX", 0.5f, 1.3f, 1f)
+            val scaleUpY = ObjectAnimator.ofFloat(binding.textFloatingDamage, "scaleY", 0.5f, 1.3f, 1f)
             
             val showAnim = AnimatorSet().apply {
                 playTogether(fadeIn, scaleUpX, scaleUpY)
-                duration = 400
+                duration = 500
             }
             
             showAnim.start()
-            
-            // 0.8秒後にフェードアウト
-            binding.textFloatingDamage.postDelayed({
-                val fadeOut = ObjectAnimator.ofFloat(binding.textFloatingDamage, "alpha", 1f, 0f)
-                fadeOut.duration = 300
-                fadeOut.start()
-                fadeOut.doOnEnd {
-                    binding.textFloatingDamage.visibility = View.GONE
-                    binding.textFloatingDamage.textSize = 48f // 元に戻す
-                }
-            }, 800)
+            showAnim.doOnEnd {
+                // 0.6秒表示した後フェードアウト
+                binding.textFloatingDamage.postDelayed({
+                    val fadeOut = ObjectAnimator.ofFloat(binding.textFloatingDamage, "alpha", 1f, 0f)
+                    fadeOut.duration = 400
+                    fadeOut.start()
+                    fadeOut.doOnEnd {
+                        binding.textFloatingDamage.visibility = View.GONE
+                        binding.textFloatingDamage.textSize = 48f // 元に戻す
+                    }
+                }, 600)
+            }
         }
     }
 
