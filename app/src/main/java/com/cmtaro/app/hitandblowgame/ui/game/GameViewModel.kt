@@ -392,8 +392,25 @@ class GameViewModel : ViewModel() {
     
     // 実際のダメージ量を計算（プレビューではなく確定値）
     private fun calculateActualDamage(attacker: Player, hit: Int, blow: Int): Int {
-        val baseDamage = hit * 10 + blow * 3
-        if (baseDamage == 0) return 0
+        // 正解時のみダメージが発生（自分の設定した数字の合計）
+        if (hit != digitCount) {
+            // 正解していない場合、Hit/Blowボーナスカードのダメージのみ
+            val (_, _, hitBonus, blowBonus) = if (attacker == Player.P1) {
+                Tuple4(p1AttackBonus, p1AttackMultiplier, p1HitBonus, p1BlowBonus)
+            } else {
+                Tuple4(p2AttackBonus, p2AttackMultiplier, p2HitBonus, p2BlowBonus)
+            }
+            
+            var bonusDamage = 0
+            if (hitBonus > 0 && hit > 0) bonusDamage += hit * hitBonus
+            if (blowBonus > 0 && blow > 0) bonusDamage += blow * blowBonus
+            
+            return bonusDamage
+        }
+        
+        // 正解した場合：自分の設定した数字の合計がベースダメージ
+        val myAnswer = if (attacker == Player.P1) p1Answer else p2Answer
+        val baseDamage = myAnswer.map { it.digitToInt() }.sum()
         
         val (attackBonus, attackMultiplier, hitBonus, blowBonus) = if (attacker == Player.P1) {
             Tuple4(p1AttackBonus, p1AttackMultiplier, p1HitBonus, p1BlowBonus)
