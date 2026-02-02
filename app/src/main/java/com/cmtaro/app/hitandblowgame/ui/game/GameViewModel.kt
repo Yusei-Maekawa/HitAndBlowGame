@@ -85,6 +85,10 @@ class GameViewModel : ViewModel() {
     // 同時ターン制：各プレイヤーの入力を一時保存
     private var p1CurrentInput: String = ""
     private var p2CurrentInput: String = ""
+    
+    // カード使用の記録
+    private var p1UsedCard: CardType? = null
+    private var p2UsedCard: CardType? = null
 
     private val _currentRound = MutableStateFlow(1)
     val currentRound = _currentRound.asStateFlow()
@@ -240,33 +244,70 @@ class GameViewModel : ViewModel() {
             val p1Result = calculator.judge(p2Answer, p1CurrentInput)
             val p2Result = calculator.judge(p1Answer, p2CurrentInput)
             
-            // ステップ1: P1の推測表示
-            _replayMessage.value = "🎯 P1 の推測: $p1CurrentInput"
+            // ステップ1: P1のカード使用表示
+            if (p1UsedCard != null) {
+                _replayMessage.value = "🃏 P1 がカードを使用:\n【${p1UsedCard!!.title}】"
+                delay(1200)
+            }
+            
+            // ステップ2: P1の推測表示
+            _replayMessage.value = buildString {
+                if (p1UsedCard != null) {
+                    appendLine("🃏 P1: ${p1UsedCard!!.title}")
+                    appendLine()
+                }
+                appendLine("🎯 P1 の推測: $p1CurrentInput")
+            }
             addBattleLog("🎯 P1 → $p1CurrentInput")
             delay(1200)
             
-            // ステップ2: P1の結果表示
+            // ステップ3: P1の結果表示
             _replayMessage.value = buildString {
-                appendLine("🎯 P1 の推測: $p1CurrentInput")
+                if (p1UsedCard != null) {
+                    appendLine("� P1: ${p1UsedCard!!.title}")
+                    appendLine()
+                }
+                appendLine("�🎯 P1 の推測: $p1CurrentInput")
                 appendLine("結果: ${p1Result.hit} Hit / ${p1Result.blow} Blow")
             }
             addBattleLog("   ${p1Result.hit}H / ${p1Result.blow}B")
             delay(1500)
             
-            // ステップ3: P2の推測表示
+            // ステップ4: P2のカード使用表示
+            if (p2UsedCard != null) {
+                _replayMessage.value = buildString {
+                    if (p1UsedCard != null) appendLine("🃏 P1: ${p1UsedCard!!.title}")
+                    appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                    appendLine()
+                    appendLine("🃏 P2 がカードを使用:\n【${p2UsedCard!!.title}】")
+                }
+                delay(1200)
+            }
+            
+            // ステップ5: P2の推測表示
             _replayMessage.value = buildString {
+                if (p1UsedCard != null) appendLine("🃏 P1: ${p1UsedCard!!.title}")
                 appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
                 appendLine()
+                if (p2UsedCard != null) {
+                    appendLine("🃏 P2: ${p2UsedCard!!.title}")
+                    appendLine()
+                }
                 appendLine("🎯 P2 の推測: $p2CurrentInput")
             }
             addBattleLog("🎯 P2 → $p2CurrentInput")
             delay(1200)
             
-            // ステップ4: P2の結果表示
+            // ステップ6: P2の結果表示
             _replayMessage.value = buildString {
-                appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                if (p1UsedCard != null) appendLine("� P1: ${p1UsedCard!!.title}")
+                appendLine("�🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
                 appendLine()
-                appendLine("🎯 P2 の推測: $p2CurrentInput")
+                if (p2UsedCard != null) {
+                    appendLine("� P2: ${p2UsedCard!!.title}")
+                    appendLine()
+                }
+                appendLine("�🎯 P2 の推測: $p2CurrentInput")
                 appendLine("結果: ${p2Result.hit} Hit / ${p2Result.blow} Blow")
             }
             addBattleLog("   ${p2Result.hit}H / ${p2Result.blow}B")
@@ -275,7 +316,10 @@ class GameViewModel : ViewModel() {
             // カードモードの場合、ダメージ計算を段階的に表示
             if (isCardMode) {
                 _replayMessage.value = buildString {
-                    appendLine("🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                    if (p1UsedCard != null) appendLine("� P1: ${p1UsedCard!!.title}")
+                    appendLine("�🎯 P1: ${p1Result.hit}H / ${p1Result.blow}B")
+                    appendLine()
+                    if (p2UsedCard != null) appendLine("🃏 P2: ${p2UsedCard!!.title}")
                     appendLine("🎯 P2: ${p2Result.hit}H / ${p2Result.blow}B")
                     appendLine()
                     appendLine("⚔️ ダメージ計算中...")
@@ -313,6 +357,18 @@ class GameViewModel : ViewModel() {
                 // P2の行動を処理
                 processPlayerAction(Player.P2, p2CurrentInput)
                 delay(800)
+                
+                // 状態異常の表示
+                val statusSummary = buildStatusSummary()
+                if (statusSummary.isNotEmpty()) {
+                    _replayMessage.value = buildString {
+                        appendLine("💥 ダメージ計算完了")
+                        appendLine()
+                        appendLine("✨ 現在の状態:")
+                        appendLine(statusSummary)
+                    }
+                    delay(1800)
+                }
             } else {
                 // 通常モードの処理
                 processPlayerAction(Player.P1, p1CurrentInput)
@@ -324,6 +380,41 @@ class GameViewModel : ViewModel() {
             // リプレイ完了
             finishReplay()
         }
+    }
+    
+    // 状態異常のサマリーを構築
+    private fun buildStatusSummary(): String {
+        val parts = mutableListOf<String>()
+        
+        // P1の状態異常
+        val p1Status = mutableListOf<String>()
+        if (_p1AttackBonus.value > 0) p1Status.add("攻撃+${_p1AttackBonus.value}")
+        if (_p1AttackMultiplier.value > 1.0) p1Status.add("攻撃×${_p1AttackMultiplier.value}")
+        if (_p1DefenseReduction.value > 0) p1Status.add("防御-${_p1DefenseReduction.value}")
+        if (_p1HasCounter.value) p1Status.add("反撃")
+        if (_p1IsInvincible.value) p1Status.add("無敵")
+        if (_p1HitBonus.value > 0) p1Status.add("Hit+${_p1HitBonus.value}")
+        if (_p1BlowBonus.value > 0) p1Status.add("Blow+${_p1BlowBonus.value}")
+        
+        if (p1Status.isNotEmpty()) {
+            parts.add("【P1】${p1Status.joinToString(", ")}")
+        }
+        
+        // P2の状態異常
+        val p2Status = mutableListOf<String>()
+        if (_p2AttackBonus.value > 0) p2Status.add("攻撃+${_p2AttackBonus.value}")
+        if (_p2AttackMultiplier.value > 1.0) p2Status.add("攻撃×${_p2AttackMultiplier.value}")
+        if (_p2DefenseReduction.value > 0) p2Status.add("防御-${_p2DefenseReduction.value}")
+        if (_p2HasCounter.value) p2Status.add("反撃")
+        if (_p2IsInvincible.value) p2Status.add("無敵")
+        if (_p2HitBonus.value > 0) p2Status.add("Hit+${_p2HitBonus.value}")
+        if (_p2BlowBonus.value > 0) p2Status.add("Blow+${_p2BlowBonus.value}")
+        
+        if (p2Status.isNotEmpty()) {
+            parts.add("【P2】${p2Status.joinToString(", ")}")
+        }
+        
+        return parts.joinToString("\n")
     }
     
     private fun processPlayerAction(player: Player, input: String) {
@@ -368,6 +459,10 @@ class GameViewModel : ViewModel() {
     }
     
     private fun finishReplay() {
+        // カード使用記録をクリア
+        p1UsedCard = null
+        p2UsedCard = null
+        
         // リプレイ完了処理
         if (_winner.value == null && _phase.value != GamePhase.FINISHED) {
             // 次のターン準備
@@ -671,6 +766,13 @@ class GameViewModel : ViewModel() {
     fun useHandCard(player: Player, card: CardType) {
         val playerName = if (player == Player.P1) "P1" else "P2"
         
+        // カード使用を記録
+        if (player == Player.P1) {
+            p1UsedCard = card
+        } else {
+            p2UsedCard = card
+        }
+        
         when (card) {
             CardType.COUNTER -> {
                 if (player == Player.P1) p1HasCounter = true else p2HasCounter = true
@@ -840,13 +942,15 @@ class GameViewModel : ViewModel() {
     fun skipCardUse() {
         when (_phase.value) {
             GamePhase.CARD_USE_P1 -> {
-                // P1がスキップしたら、P2の数字入力フェーズへ
+                // P1がスキップしたら、使用カードをクリア
+                p1UsedCard = null
                 addBattleLog("⏭️ P1 カード使用をスキップ")
                 _phase.value = GamePhase.WAITING_P2_INPUT
                 _currentPlayer.value = Player.P2
             }
             GamePhase.CARD_USE_P2 -> {
-                // P2がスキップしたら、リプレイ開始
+                // P2がスキップしたら、使用カードをクリア
+                p2UsedCard = null
                 addBattleLog("⏭️ P2 カード使用をスキップ")
                 startReplay()
             }
