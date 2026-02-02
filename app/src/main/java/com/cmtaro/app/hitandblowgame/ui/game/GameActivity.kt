@@ -20,7 +20,7 @@ class GameActivity : AppCompatActivity() {
     private lateinit var p2Adapter: GuessLogAdapter
 
     private var currentInputString = ""
-    private val digitCount = 3 // 必要に応じて変更可能
+    private var digitCount = 3 // Intentから受け取った値で上書きされる
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,7 +28,7 @@ class GameActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // 初期設定
-        val digitCount = intent.getIntExtra("DIGIT_COUNT", 3)
+        digitCount = intent.getIntExtra("DIGIT_COUNT", 3)
         val isCardMode = intent.getBooleanExtra("IS_CARD_MODE", false)
 
         viewModel.setCardMode(isCardMode)
