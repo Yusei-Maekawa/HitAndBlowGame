@@ -2,6 +2,7 @@
 
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -14,6 +15,7 @@ import androidx.core.animation.doOnEnd
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.cmtaro.app.hitandblowgame.databinding.ActivityGameBinding
+import com.cmtaro.app.hitandblowgame.ui.history.HistoryActivity
 import kotlinx.coroutines.launch
 
 /**
@@ -459,7 +461,9 @@ class GameActivity : AppCompatActivity() {
                 finish()
             }
             .setNegativeButton("履歴を見る") { _, _ ->
-                // 履歴画面に遷移（後で実装可能）
+                // 履歴画面に遷移
+                val intent = Intent(this, HistoryActivity::class.java)
+                startActivity(intent)
                 finish()
             }
             .setCancelable(false)

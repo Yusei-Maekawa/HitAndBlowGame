@@ -20,7 +20,10 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".ui.menu.MenuActivity" />
         <activity android:name=".ui.game.GameActivity" />
+        <activity android:name=".ui.result.ResultActivity" />
+        <activity android:name=".ui.history.HistoryActivity" />
 
     </application>
 
