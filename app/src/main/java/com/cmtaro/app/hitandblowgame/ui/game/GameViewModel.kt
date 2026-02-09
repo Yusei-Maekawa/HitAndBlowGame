@@ -230,27 +230,49 @@ class GameViewModel : ViewModel() {
         when (_phase.value) {
             GamePhase.SETTING_P1 -> {
                 p1Answer = input
-                // P1の数字設定後、カード選択へ
-                _phase.value = GamePhase.CARD_SELECT_P1
-                prepareRoundStartCards()
+                if (isCardMode) {
+                    // カードモード：カード選択へ
+                    _phase.value = GamePhase.CARD_SELECT_P1
+                    prepareRoundStartCards()
+                } else {
+                    // 通常モード：P2の数字設定へ
+                    _phase.value = GamePhase.SETTING_P2
+                }
             }
             GamePhase.SETTING_P2 -> {
                 p2Answer = input
-                // P2の数字設定後、カード選択へ
-                _phase.value = GamePhase.CARD_SELECT_P2
-                prepareRoundStartCards()
+                if (isCardMode) {
+                    // カードモード：カード選択へ
+                    _phase.value = GamePhase.CARD_SELECT_P2
+                    prepareRoundStartCards()
+                } else {
+                    // 通常モード：ゲーム開始
+                    _phase.value = GamePhase.PLAYING
+                    _currentPlayer.value = Player.P1
+                }
             }
             GamePhase.PLAYING -> {
-                // P1の入力後、手札カード使用フェーズへ
                 p1CurrentInput = input
-                _phase.value = GamePhase.CARD_USE_P1
-                _currentPlayer.value = Player.P1
+                if (isCardMode) {
+                    // カードモード：手札カード使用フェーズへ
+                    _phase.value = GamePhase.CARD_USE_P1
+                    _currentPlayer.value = Player.P1
+                } else {
+                    // 通常モード：P2の入力待ちへ
+                    _phase.value = GamePhase.WAITING_P2_INPUT
+                    _currentPlayer.value = Player.P2
+                }
             }
             GamePhase.WAITING_P2_INPUT -> {
-                // P2の入力後、手札カード使用フェーズへ
                 p2CurrentInput = input
-                _phase.value = GamePhase.CARD_USE_P2
-                _currentPlayer.value = Player.P2
+                if (isCardMode) {
+                    // カードモード：手札カード使用フェーズへ
+                    _phase.value = GamePhase.CARD_USE_P2
+                    _currentPlayer.value = Player.P2
+                } else {
+                    // 通常モード：リプレイ開始
+                    startReplay()
+                }
             }
             else -> {}
         }
