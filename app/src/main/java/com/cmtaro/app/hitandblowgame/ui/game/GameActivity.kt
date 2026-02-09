@@ -40,6 +40,9 @@ class GameActivity : AppCompatActivity() {
     private var lastRound = 1
     /** アニメーション制御用の前回ターン数 */
     private var lastTurn = 1
+    
+    /** バトルログの表示状態（true: フル表示、false: 縮小表示） */
+    private var isBattleLogExpanded = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +71,7 @@ class GameActivity : AppCompatActivity() {
 
         setupRecyclerViews()
         setupNumericKeypad()
+        setupBottomActions()
         setupObservers()
     }
 
@@ -90,6 +94,35 @@ class GameActivity : AppCompatActivity() {
         binding.recyclerBattleLog.apply {
             layoutManager = LinearLayoutManager(this@GameActivity)
             adapter = battleLogAdapter
+            // タップでバトルログのサイズをトグル
+            setOnClickListener {
+                toggleBattleLogSize()
+            }
+        }
+    }
+    
+    /**
+     * バトルログのサイズをトグル（縮小⇔拡大）
+     */
+    private fun toggleBattleLogSize() {
+        isBattleLogExpanded = !isBattleLogExpanded
+        
+        val params = binding.recyclerBattleLog.layoutParams
+        if (isBattleLogExpanded) {
+            // 拡大表示：画面の50%程度
+            params.height = (binding.root.height * 0.5).toInt()
+            Toast.makeText(this, "📋 バトルログ全体表示（もう一度タップで縮小）", Toast.LENGTH_SHORT).show()
+        } else {
+            // 縮小表示：元のサイズ（200dp相当）
+            params.height = (200 * resources.displayMetrics.density).toInt()
+            Toast.makeText(this, "📋 通常表示", Toast.LENGTH_SHORT).show()
+        }
+        binding.recyclerBattleLog.layoutParams = params
+        
+        // 最新ログにスクロール
+        val logs = viewModel.battleLog.value
+        if (logs.isNotEmpty()) {
+            binding.recyclerBattleLog.smoothScrollToPosition(logs.size - 1)
         }
     }
 
@@ -181,6 +214,27 @@ class GameActivity : AppCompatActivity() {
                     GamePhase.PLAYING, GamePhase.WAITING_P2_INPUT
                 )
                 binding.layoutInput.visibility = if (showInput) View.VISIBLE else View.GONE
+
+                // リプレイ中は両プレイヤーを同等に表示（サイズは変えず、アクティブ時の濃さに揃える）
+                if (phase == GamePhase.REPLAYING) {
+                    // ログ表示エリアをアクティブな濃さに揃える（大きさは1.0のまま）
+                    binding.recyclerP1Logs.alpha = 1.0f
+                    binding.recyclerP1Logs.scaleX = 1.0f
+                    binding.recyclerP1Logs.scaleY = 1.0f
+                    binding.recyclerP2Logs.alpha = 1.0f
+                    binding.recyclerP2Logs.scaleX = 1.0f
+                    binding.recyclerP2Logs.scaleY = 1.0f
+
+                    // カードモードのHPステータス領域も同様に扱う
+                    if (isCardMode) {
+                        binding.layoutP1Status.alpha = 1.0f
+                        binding.layoutP1Status.scaleX = 1.0f
+                        binding.layoutP1Status.scaleY = 1.0f
+                        binding.layoutP2Status.alpha = 1.0f
+                        binding.layoutP2Status.scaleX = 1.0f
+                        binding.layoutP2Status.scaleY = 1.0f
+                    }
+                }
 
                 // 手札確認フェーズの処理
                 if (isCardMode && (phase == GamePhase.HAND_CONFIRM_P1 || phase == GamePhase.HAND_CONFIRM_P2)) {
@@ -396,8 +450,54 @@ class GameActivity : AppCompatActivity() {
                 winner?.let {
                     // 勝者のログエリアをハイライト表示
                     highlightWinner(it)
-                    // 試合終了後、結果を大きく表示
-                    showGameResultDialog(it)
+                    // 試合終了後、オーバーレイで選択肢を表示
+                    showGameEndOverlay(it)
+                    // 下部アクションバーは「試合結果を表示する」を押すまで非表示
+                } ?: run {
+                    // winner が null の場合でも、引き分けフラグが立っているときはオーバーレイを消さない
+                    if (!viewModel.isDraw.value) {
+                        // ゲームリセット時に非表示にする
+                        binding.layoutBottomActions.visibility = View.GONE
+                        binding.layoutGameEndOverlay.visibility = View.GONE
+                    }
+                }
+            }
+        }
+
+        // 引き分けの監視（同一ターンで両者正解になった場合）
+        lifecycleScope.launch {
+            viewModel.isDraw.collect { draw ->
+                if (draw) {
+                    // 引き分けメッセージを表示してオーバーレイを表示
+                    binding.textGameEndMessage.text = "引き分け！両者が同じターンに正解しました"
+                    
+                    // 両者を同等にハイライト（引き分け表現）
+                    highlightDraw()
+                    
+                    // オーバーレイを表示し、ボタンハンドラを設定（showGameEndOverlayと同じ処理）
+                    binding.layoutGameEndOverlay.visibility = View.VISIBLE
+                    binding.layoutBottomActions.visibility = View.GONE
+                    
+                    // ボタンハンドラを設定（引き分け専用）
+                    binding.btnShowResult.setOnClickListener {
+                        // オーバーレイを閉じて下部ボタンを表示
+                        binding.layoutGameEndOverlay.visibility = View.GONE
+                        binding.layoutBottomActions.visibility = View.VISIBLE
+                    }
+                    binding.btnBackToTitle.setOnClickListener {
+                        finish()
+                    }
+                    binding.btnPlayAgain.setOnClickListener {
+                        binding.layoutGameEndOverlay.visibility = View.GONE
+                        binding.layoutBottomActions.visibility = View.GONE
+                        resetWinnerHighlight()
+                        viewModel.resetGame()
+                    }
+                } else {
+                    // 引き分けフラグが解除されたらオーバーレイを隠す
+                    binding.layoutGameEndOverlay.visibility = View.GONE
+                    binding.layoutBottomActions.visibility = View.GONE
+                    resetWinnerHighlight()
                 }
             }
         }
@@ -411,24 +511,78 @@ class GameActivity : AppCompatActivity() {
         val winnerView = if (winner == Player.P1) binding.recyclerP1Logs else binding.recyclerP2Logs
         val loserView = if (winner == Player.P1) binding.recyclerP2Logs else binding.recyclerP1Logs
         
-        // 勝者エリアを強調：明るく、大きく、金色の背景
+        // 勝者エリアを強調：明るく、少し大きく、明るい金色の背景
         winnerView.animate()
             .alpha(1.0f)
-            .scaleX(1.1f)
-            .scaleY(1.1f)
+            .scaleX(1.05f)
+            .scaleY(1.05f)
             .setDuration(500)
             .setInterpolator(OvershootInterpolator())
             .start()
-        winnerView.setBackgroundColor(Color.parseColor("#FFD700")) // ゴールド
+        winnerView.setBackgroundColor(Color.parseColor("#FFF9C4")) // 明るい黄色
         
-        // 敗者エリアを暗く小さく
+        // 敗者エリアは透明度を少し下げるだけ（見やすさ優先）
         loserView.animate()
-            .alpha(0.4f)
-            .scaleX(0.9f)
-            .scaleY(0.9f)
+            .alpha(0.6f)
+            .scaleX(1.0f)
+            .scaleY(1.0f)
             .setDuration(500)
             .start()
-        loserView.setBackgroundColor(Color.parseColor("#424242")) // グレー
+        loserView.setBackgroundColor(Color.parseColor("#F5F5F5")) // 薄いグレー
+    }
+
+    /**
+     * 引き分け時のハイライト（両者同等に強調）
+     */
+    private fun highlightDraw() {
+        // 両ログエリアを同等に強調する（やさしい色合い）
+        listOf(binding.recyclerP1Logs, binding.recyclerP2Logs).forEach { v ->
+            v.animate()
+                .alpha(1.0f)
+                .scaleX(1.02f)
+                .scaleY(1.02f)
+                .setDuration(500)
+                .setInterpolator(OvershootInterpolator())
+                .start()
+            v.setBackgroundColor(Color.parseColor("#FFFDE7")) // 薄い淡いイエロー
+        }
+    }
+
+    // 下部のボタン（もう一度遊ぶ / ホームに戻る）の設定
+    private fun setupBottomActions() {
+        binding.btnBottomPlayAgain.setOnClickListener {
+            // 隠れているオーバーレイを閉じて再スタート
+            binding.layoutGameEndOverlay.visibility = View.GONE
+            binding.layoutBottomActions.visibility = View.GONE
+            resetWinnerHighlight()
+            viewModel.resetGame()
+        }
+        binding.btnBottomBackHome.setOnClickListener {
+            finish()
+        }
+    }
+    
+    /**
+     * 勝者ハイライトをリセット（もう一度遊ぶ時に呼ぶ）
+     */
+    private fun resetWinnerHighlight() {
+        // P1ログエリアをリセット
+        binding.recyclerP1Logs.animate()
+            .alpha(1.0f)
+            .scaleX(1.0f)
+            .scaleY(1.0f)
+            .setDuration(0)
+            .start()
+        binding.recyclerP1Logs.setBackgroundColor(Color.TRANSPARENT)
+        
+        // P2ログエリアをリセット
+        binding.recyclerP2Logs.animate()
+            .alpha(1.0f)
+            .scaleX(1.0f)
+            .scaleY(1.0f)
+            .setDuration(0)
+            .start()
+        binding.recyclerP2Logs.setBackgroundColor(Color.TRANSPARENT)
     }
 
     /**
@@ -1027,4 +1181,30 @@ class GameActivity : AppCompatActivity() {
         }
     }
 
+    // 試合終了オーバーレイの操作
+    private fun showGameEndOverlay(winner: Player) {
+        // メッセージを作成
+        val winnerName = if (winner == Player.P1) "プレイヤー1" else "プレイヤー2"
+        val message = "$winnerName の勝利！\n総ターン: ${viewModel.totalTurns.value}"
+
+        binding.textGameEndMessage.text = message
+        binding.layoutGameEndOverlay.visibility = View.VISIBLE
+
+        // ボタンハンドラ
+        binding.btnShowResult.setOnClickListener {
+            // オーバーレイを閉じて下部ボタンを表示
+            binding.layoutGameEndOverlay.visibility = View.GONE
+            binding.layoutBottomActions.visibility = View.VISIBLE
+        }
+        binding.btnBackToTitle.setOnClickListener {
+            finish()
+        }
+        binding.btnPlayAgain.setOnClickListener {
+            binding.layoutGameEndOverlay.visibility = View.GONE
+            binding.layoutBottomActions.visibility = View.GONE
+            resetWinnerHighlight()
+            // ViewModelをリセットして再スタート
+            viewModel.resetGame()
+        }
+    }
 }

@@ -101,6 +101,10 @@ class GameViewModel : ViewModel() {
     private val _winner = MutableStateFlow<Player?>(null)
     val winner = _winner.asStateFlow()
 
+    // 引き分けフラグ（同一ターンで両者正解になった場合）
+    private val _isDraw = MutableStateFlow(false)
+    val isDraw = _isDraw.asStateFlow()
+
     private var p1Answer: String = ""
     private var p2Answer: String = ""
 
@@ -183,6 +187,10 @@ class GameViewModel : ViewModel() {
     private val _showHandCardDialog = MutableStateFlow(false)
     val showHandCardDialog = _showHandCardDialog.asStateFlow()
 
+    // バトルログ全体表示用
+    private val _showBattleLogDialog = MutableStateFlow(false)
+    val showBattleLogDialog = _showBattleLogDialog.asStateFlow()
+
     fun setDigitCount(count: Int) { digitCount = count }
 
     // MainActivityから渡されるフラグをセット
@@ -218,10 +226,7 @@ class GameViewModel : ViewModel() {
     // バトルログに追加
     private fun addBattleLog(message: String) {
         _battleLog.value = _battleLog.value + message
-        // 最新10件のみ保持
-        if (_battleLog.value.size > 10) {
-            _battleLog.value = _battleLog.value.takeLast(10)
-        }
+        // 全ラウンドのログを保持（件数制限なし）
     }
 
     fun onInputSubmitted(input: String) {
@@ -318,6 +323,9 @@ class GameViewModel : ViewModel() {
                 
                 _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P2, null, 0, p2Result.hit, p2Result.blow)
                 delay(2000)
+
+                // カードモードでは同時正解は引き分けではなく両者自傷ダメージ（ラウンド継続）
+                // 引き分けは通常モード専用
                 
                 // ステップ4: P1の攻撃演出（ダメージがある場合のみ）
                 val p1Damage = calculateActualDamage(Player.P1, p1Result.hit, p1Result.blow)
@@ -340,17 +348,32 @@ class GameViewModel : ViewModel() {
                 delay(600)
             } else {
                 // 通常モードの処理（Hit/Blowのみで攻撃なし）
-                // P1の結果を表示
+                // まず両者の結果を表示してから処理する（同ターン両者正解を引き分けにするため）
                 _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P1, null, 0, p1Result.hit, p1Result.blow)
                 delay(2000)
-                processPlayerAction(Player.P1, p1CurrentInput)
-                delay(1000)
-                
-                // P2の結果を表示
                 _replayEffect.value = ReplayEffect(EffectType.RESULT_DISPLAY, Player.P2, null, 0, p2Result.hit, p2Result.blow)
                 delay(2000)
+
+                // 通常通りの処理（片方ずつ記録）
+                processPlayerAction(Player.P1, p1CurrentInput)
+                delay(1000)
                 processPlayerAction(Player.P2, p2CurrentInput)
                 delay(1000)
+                
+                // ターン完了後に結果判定
+                // 両者同時正解の場合は引き分け扱い
+                if (p1Result.hit == digitCount && p2Result.hit == digitCount) {
+                    _isDraw.value = true
+                    _phase.value = GamePhase.FINISHED
+                } else if (p1Result.hit == digitCount) {
+                    // P1のみ正解
+                    _winner.value = Player.P1
+                    _phase.value = GamePhase.FINISHED
+                } else if (p2Result.hit == digitCount) {
+                    // P2のみ正解
+                    _winner.value = Player.P2
+                    _phase.value = GamePhase.FINISHED
+                }
             }
 
             // リプレイ完了
@@ -503,8 +526,10 @@ class GameViewModel : ViewModel() {
         val newGuess = Guess(player.name, input, result.hit, result.blow)
         if (player == Player.P1) _p1Logs.value += newGuess else _p2Logs.value += newGuess
 
-        // ターン数をカウント
-        _totalTurns.value += 1
+        // ターン数をカウント（P2の行動時のみ = 両プレイヤーが行動完了で1ターン）
+        if (player == Player.P2) {
+            _totalTurns.value += 1
+        }
 
         if (isCardMode) {
             // ダメージ計算
@@ -522,11 +547,8 @@ class GameViewModel : ViewModel() {
                 addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value} 終了")
             }
         } else {
-            // 通常モード（digitCount分のヒットで即終了：3桁なら3hit、4桁なら4hit）
-            if (result.hit == digitCount) {
-                _winner.value = player
-                _phase.value = GamePhase.FINISHED
-            }
+            // 通常モード：勝敗判定はstartReplayでターン完了後に行う
+            // ここでは何もしない（ログ記録のみ）
         }
     }
 
@@ -563,8 +585,10 @@ class GameViewModel : ViewModel() {
                 p1CurrentInput = ""
                 p2CurrentInput = ""
 
-                // ターン数をインクリメント
-                _currentTurn.value += 1
+                // ターン数をインクリメント（カードモードのみ）
+                if (isCardMode) {
+                    _currentTurn.value += 1
+                }
             }
         }
         
@@ -678,10 +702,17 @@ class GameViewModel : ViewModel() {
                         damageLog = "P2の反撃！P1に${attackDamage}ダメージ$effectText"
                         addBattleLog("🔄 P2 反撃！ → P1 -${attackDamage} HP$effectText (残り: ${_p1Hp.value})")
                         p2HasCounter = false
+                    } else if (p2IsInvincible) {
+                        // P2が無敵状態の場合、ダメージ無効
+                        damageLog = "P2は無敵！ダメージ無効"
+                        addBattleLog("🛡️ P2 無敵！ → ダメージ無効")
+                        p2IsInvincible = false
                     } else {
+                        // Hit/Blowボーナスダメージがある場合はログに追加
+                        val bonusDamageText = if (bonusDamage > 0) " [Hit/Blow+${bonusDamage}]" else ""
                         _p2Hp.value = (p2Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
-                        damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}$effectText"
-                        addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP$effectText (残り: ${_p2Hp.value})")
+                        damageLog = "P1がP2に攻撃ダメージ -${attackDamage + bonusDamage}$effectText$bonusDamageText"
+                        addBattleLog("⚔️ P1 → P2 -${attackDamage + bonusDamage} HP$effectText$bonusDamageText (残り: ${_p2Hp.value})")
                     }
                 } else {
                     attackDamage = ((baseAttack + p2AttackBonus) * p2AttackMultiplier).toInt()
@@ -697,10 +728,17 @@ class GameViewModel : ViewModel() {
                         damageLog = "P1の反撃！P2に${attackDamage}ダメージ$effectText"
                         addBattleLog("🔄 P1 反撃！ → P2 -${attackDamage} HP$effectText (残り: ${_p2Hp.value})")
                         p1HasCounter = false
+                    } else if (p1IsInvincible) {
+                        // P1が無敵状態の場合、ダメージ無効
+                        damageLog = "P1は無敵！ダメージ無効"
+                        addBattleLog("🛡️ P1 無敵！ → ダメージ無効")
+                        p1IsInvincible = false
                     } else {
+                        // Hit/Blowボーナスダメージがある場合はログに追加
+                        val bonusDamageText = if (bonusDamage > 0) " [Hit/Blow+${bonusDamage}]" else ""
                         _p1Hp.value = (p1Hp.value - attackDamage - bonusDamage).coerceIn(0, 100)
-                        damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}$effectText"
-                        addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP$effectText (残り: ${_p1Hp.value})")
+                        damageLog = "P2がP1に攻撃ダメージ -${attackDamage + bonusDamage}$effectText$bonusDamageText"
+                        addBattleLog("⚔️ P2 → P1 -${attackDamage + bonusDamage} HP$effectText$bonusDamageText (残り: ${_p1Hp.value})")
                     }
                 }
             }
@@ -709,13 +747,31 @@ class GameViewModel : ViewModel() {
             if (bonusDamage > 0) {
                 // Hit/Blowボーナスカードの効果がある場合のみダメージ
                 if (current == Player.P1) {
-                    _p2Hp.value = (p2Hp.value - bonusDamage).coerceIn(0, 100)
-                    damageLog = "P1のHit/Blowボーナス！P2に${bonusDamage}ダメージ"
-                    addBattleLog("✨ P1 Hit/Blowボーナス → P2 -${bonusDamage} HP (残り: ${_p2Hp.value})")
+                    if (p2IsInvincible) {
+                        // P2が無敵状態の場合、ダメージ無効
+                        damageLog = "P2は無敵！Hit/Blowボーナスダメージ無効"
+                        addBattleLog("🛡️ P2 無敵！ → Hit/Blowボーナスダメージ無効")
+                        p2IsInvincible = false
+                    } else {
+                        val hitBonusDetail = if (p1HitBonus > 0 && hit > 0) " [Hit:${hit}×5=${hit * 5}]" else ""
+                        val blowBonusDetail = if (p1BlowBonus > 0 && blow > 0) " [Blow:${blow}×3=${blow * 3}]" else ""
+                        _p2Hp.value = (p2Hp.value - bonusDamage).coerceIn(0, 100)
+                        damageLog = "P1のHit/Blowボーナス！P2に${bonusDamage}ダメージ$hitBonusDetail$blowBonusDetail"
+                        addBattleLog("✨ P1 Hit/Blowボーナス → P2 -${bonusDamage} HP$hitBonusDetail$blowBonusDetail (残り: ${_p2Hp.value})")
+                    }
                 } else {
-                    _p1Hp.value = (p1Hp.value - bonusDamage).coerceIn(0, 100)
-                    damageLog = "P2のHit/Blowボーナス！P1に${bonusDamage}ダメージ"
-                    addBattleLog("✨ P2 Hit/Blowボーナス → P1 -${bonusDamage} HP (残り: ${_p1Hp.value})")
+                    if (p1IsInvincible) {
+                        // P1が無敵状態の場合、ダメージ無効
+                        damageLog = "P1は無敵！Hit/Blowボーナスダメージ無効"
+                        addBattleLog("🛡️ P1 無敵！ → Hit/Blowボーナスダメージ無効")
+                        p1IsInvincible = false
+                    } else {
+                        val hitBonusDetail = if (p2HitBonus > 0 && hit > 0) " [Hit:${hit}×5=${hit * 5}]" else ""
+                        val blowBonusDetail = if (p2BlowBonus > 0 && blow > 0) " [Blow:${blow}×3=${blow * 3}]" else ""
+                        _p1Hp.value = (p1Hp.value - bonusDamage).coerceIn(0, 100)
+                        damageLog = "P2のHit/Blowボーナス！P1に${bonusDamage}ダメージ$hitBonusDetail$blowBonusDetail"
+                        addBattleLog("✨ P2 Hit/Blowボーナス → P1 -${bonusDamage} HP$hitBonusDetail$blowBonusDetail (残り: ${_p1Hp.value})")
+                    }
                 }
             } else {
                 damageLog = "${current.name}はダメージなし (${hit}H ${blow}B)"
@@ -725,9 +781,9 @@ class GameViewModel : ViewModel() {
 
         _lastDamageInfo.value = damageLog
 
-        // 死亡チェック
-        if (_p1Hp.value <= 0) _winner.value = Player.P2
-        if (_p2Hp.value <= 0) _winner.value = Player.P1
+        // 死亡チェック（両方同時に0以下になった場合は先に倒したプレイヤーの勝利）
+        if (_p1Hp.value <= 0 && _winner.value == null) _winner.value = Player.P2
+        if (_p2Hp.value <= 0 && _winner.value == null) _winner.value = Player.P1
 
         // ステータス効果を更新
         updateStatusEffects()
@@ -1058,5 +1114,36 @@ class GameViewModel : ViewModel() {
 
     fun dismissCardUseDialog() {
         _showHandCardDialog.value = false
+    }
+
+    // バトルログダイアログの表示/非表示
+    fun showBattleLogDialog() {
+        _showBattleLogDialog.value = true
+    }
+
+    fun dismissBattleLogDialog() {
+        _showBattleLogDialog.value = false
+    }
+
+    // リマッチ用にゲームをリセット
+    fun resetGame() {
+        _winner.value = null
+        _isDraw.value = false
+        _p1Hp.value = 100
+        _p2Hp.value = 100
+        _p1Logs.value = emptyList()
+        _p2Logs.value = emptyList()
+        _totalTurns.value = 0
+        _currentRound.value = 1
+        _currentTurn.value = 1
+        p1Answer = ""
+        p2Answer = ""
+        p1CurrentInput = ""
+        p2CurrentInput = ""
+        roundWinner = null
+        // ワンタイム効果をクリア
+        clearOneTimeCardEffects()
+        // 新しいラウンドを開始（現在のモードを維持）
+        startNewRound()
     }
 }
