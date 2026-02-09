@@ -16,12 +16,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAlignment="center"
-            android:textSize="18sp"
+            android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="#1976D2"
-            android:padding="8dp"
-            android:background="#E3F2FD"
-            android:elevation="2dp"
             android:text="プレイヤー1：数字を決めてください" />
 
         <TextView
@@ -29,11 +25,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAlignment="center"
-            android:textSize="14sp"
-            android:textColor="#FF6F00"
-            android:textStyle="bold"
             android:layout_marginTop="4dp"
-            android:padding="4dp"
             android:text="現在：P1" />
 
         <!-- 進行状況表示エリア -->
@@ -87,24 +79,25 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAlignment="center"
-            android:textSize="13sp"
-            android:textColor="#C62828"
+            android:textSize="12sp"
+            android:textColor="#D32F2F"
             android:textStyle="bold"
-            android:padding="6dp"
+            android:padding="4dp"
             android:background="#FFEBEE"
             android:layout_marginTop="4dp"
-            android:elevation="2dp"
             android:visibility="gone"
             android:text="" />
 
-        <!-- バトルログエリア -->
+        <!-- バトルログエリア（タップで拡大/縮小） -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerBattleLog"
             android:layout_width="match_parent"
-            android:layout_height="80dp"
+            android:layout_height="200dp"
             android:layout_marginTop="4dp"
             android:background="#F5F5F5"
             android:padding="4dp"
+            android:clickable="true"
+            android:focusable="true"
             android:visibility="gone" />
 
         <View
@@ -274,33 +267,63 @@
                     android:text="" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- フローティングダメージ表示用（リプレイや回復表示用） -->
+        <TextView
+            android:id="@+id/textFloatingDamage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text=""
+            android:textSize="48sp"
+            android:textColor="#FFFFFF"
+            android:shadowColor="#80000000"
+            android:padding="8dp" />
+
+        <!-- 攻撃／エフェクト描画用のビュー（位置を動かして演出を行う） -->
+        <View
+            android:id="@+id/viewAttackEffect"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:visibility="gone"
+            android:layout_gravity="center"
+            android:background="#00FFFFFF"
+            android:elevation="8dp" />
     </LinearLayout>
 
-    <!-- 攻撃エフェクト -->
-    <View
-        android:id="@+id/viewAttackEffect"
-        android:layout_width="80dp"
-        android:layout_height="80dp"
-        android:layout_gravity="center"
-        android:background="@android:color/transparent"
+    <!-- リプレイオーバーレイ -->
+    <LinearLayout
+        android:id="@+id/layoutReplayOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#E6000000"
+        android:gravity="center"
+        android:padding="32dp"
         android:visibility="gone"
-        android:elevation="5dp" />
+        android:clickable="true"
+        android:focusable="true">
 
-    <!-- フローティングダメージ数値 -->
-    <TextView
-        android:id="@+id/textFloatingDamage"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:textSize="48sp"
-        android:textStyle="bold"
-        android:textColor="#FF0000"
-        android:visibility="gone"
-        android:elevation="6dp"
-        android:shadowColor="#000000"
-        android:shadowDx="2"
-        android:shadowDy="2"
-        android:shadowRadius="4" />
+        <TextView
+            android:id="@+id/textReplayTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📊 ターン結果"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp" />
+
+        <TextView
+            android:id="@+id/textReplayMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.5"
+            android:text="" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/layoutCardSelection"
@@ -326,6 +349,100 @@
         <Button android:id="@+id/btnCard1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" />
         <Button android:id="@+id/btnCard2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="8dp" />
         <Button android:id="@+id/btnCard3" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <!-- 試合終了オーバーレイ（ポップアップの代わり） -->
+    <LinearLayout
+        android:id="@+id/layoutGameEndOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#E6000000"
+        android:gravity="center"
+        android:padding="24dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:id="@+id/textGameEndTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎉 試合終了 🎉"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/textGameEndMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"
+            android:text="" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/btnShowResult"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="試合結果を表示する"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnBackToTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="タイトルに戻る"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnPlayAgain"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="もう一度遊ぶ" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Bottom action bar: もう一度遊ぶ / ホーム画面に戻る -->
+    <LinearLayout
+        android:id="@+id/layoutBottomActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="12dp"
+        android:layout_gravity="bottom"
+        android:background="#FFFFFF"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnBottomPlayAgain"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="もう一度遊ぶ"
+            android:textAllCaps="false"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnBottomBackHome"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="ホーム画面に戻る"
+            android:textAllCaps="false"
+            android:layout_marginStart="8dp" />
+
     </LinearLayout>
 
 </FrameLayout>
