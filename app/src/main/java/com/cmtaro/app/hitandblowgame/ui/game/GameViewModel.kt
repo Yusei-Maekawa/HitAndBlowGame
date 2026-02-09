@@ -206,6 +206,11 @@ class GameViewModel : ViewModel() {
     }
 
     private fun startNewRound() {
+        // 前ラウンドの答えをログに記録（2ラウンド目以降）
+        if (_currentRound.value > 1 && p1Answer.isNotEmpty() && p2Answer.isNotEmpty()) {
+            addBattleLog("📝 ラウンド${_currentRound.value - 1} 答え：P1=$p1Answer / P2=$p2Answer")
+        }
+        
         // ラウンド開始時：まず数字設定から
         _phase.value = GamePhase.SETTING_P1
         addBattleLog("🎮 ラウンド${_currentRound.value} 開始！")
@@ -235,6 +240,7 @@ class GameViewModel : ViewModel() {
         when (_phase.value) {
             GamePhase.SETTING_P1 -> {
                 p1Answer = input
+                addBattleLog("🔒 P1 が数字を設定しました")
                 if (isCardMode) {
                     // カードモード：カード選択へ
                     _phase.value = GamePhase.CARD_SELECT_P1
@@ -246,6 +252,7 @@ class GameViewModel : ViewModel() {
             }
             GamePhase.SETTING_P2 -> {
                 p2Answer = input
+                addBattleLog("🔒 P2 が数字を設定しました")
                 if (isCardMode) {
                     // カードモード：カード選択へ
                     _phase.value = GamePhase.CARD_SELECT_P2
@@ -363,14 +370,17 @@ class GameViewModel : ViewModel() {
                 // ターン完了後に結果判定
                 // 両者同時正解の場合は引き分け扱い
                 if (p1Result.hit == digitCount && p2Result.hit == digitCount) {
+                    addBattleLog("📝 最終答え：P1=$p1Answer / P2=$p2Answer")
                     _isDraw.value = true
                     _phase.value = GamePhase.FINISHED
                 } else if (p1Result.hit == digitCount) {
                     // P1のみ正解
+                    addBattleLog("📝 最終答え：P1=$p1Answer / P2=$p2Answer")
                     _winner.value = Player.P1
                     _phase.value = GamePhase.FINISHED
                 } else if (p2Result.hit == digitCount) {
                     // P2のみ正解
+                    addBattleLog("📝 最終答え：P1=$p1Answer / P2=$p2Answer")
                     _winner.value = Player.P2
                     _phase.value = GamePhase.FINISHED
                 }
@@ -537,6 +547,7 @@ class GameViewModel : ViewModel() {
 
             // 決着チェック（HP 0以下）
             if (_winner.value != null) {
+                addBattleLog("📝 最終答え：P1=$p1Answer / P2=$p2Answer")
                 _phase.value = GamePhase.FINISHED
                 return
             }
@@ -545,6 +556,7 @@ class GameViewModel : ViewModel() {
             if (result.hit == digitCount) {
                 roundWinner = player
                 addBattleLog("🎯 ${player.name} が正解！ラウンド${_currentRound.value} 終了")
+                addBattleLog("📝 ラウンド${_currentRound.value} 答え：P1=$p1Answer / P2=$p2Answer")
             }
         } else {
             // 通常モード：勝敗判定はstartReplayでターン完了後に行う
