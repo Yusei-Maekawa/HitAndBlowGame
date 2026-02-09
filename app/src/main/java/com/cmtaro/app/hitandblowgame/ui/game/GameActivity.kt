@@ -364,12 +364,16 @@ class GameActivity : AppCompatActivity() {
                 val playerName = if (player == Player.P1) "P1" else "P2"
                 binding.textCurrentPlayer.text = "$playerName の番です"
 
-                // 視覚的なターン強調（アニメーション付き）
-                animatePlayerSwitch(
-                    binding.recyclerP1Logs,
-                    binding.recyclerP2Logs,
-                    player == Player.P1
-                )
+                // リプレイ中はログのズームアニメーションをスキップ
+                val currentPhase = viewModel.phase.value
+                if (currentPhase != GamePhase.REPLAYING) {
+                    // 視覚的なターン強調（アニメーション付き）
+                    animatePlayerSwitch(
+                        binding.recyclerP1Logs,
+                        binding.recyclerP2Logs,
+                        player == Player.P1
+                    )
+                }
 
                 // カードモードの場合のみHPステータスの強調
                 if (isCardMode) {
@@ -388,6 +392,8 @@ class GameActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.winner.collect { winner ->
                 winner?.let {
+                    // 勝者のログエリアをハイライト表示
+                    highlightWinner(it)
                     // 試合終了後、結果を大きく表示
                     showGameResultDialog(it)
                 }
@@ -395,6 +401,34 @@ class GameActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * 勝者のプレイヤーエリアを視覚的にハイライト表示
+     * @param winner 勝利したプレイヤー
+     */
+    private fun highlightWinner(winner: Player) {
+        val winnerView = if (winner == Player.P1) binding.recyclerP1Logs else binding.recyclerP2Logs
+        val loserView = if (winner == Player.P1) binding.recyclerP2Logs else binding.recyclerP1Logs
+        
+        // 勝者エリアを強調：明るく、大きく、金色の背景
+        winnerView.animate()
+            .alpha(1.0f)
+            .scaleX(1.1f)
+            .scaleY(1.1f)
+            .setDuration(500)
+            .setInterpolator(OvershootInterpolator())
+            .start()
+        winnerView.setBackgroundColor(Color.parseColor("#FFD700")) // ゴールド
+        
+        // 敗者エリアを暗く小さく
+        loserView.animate()
+            .alpha(0.4f)
+            .scaleX(0.9f)
+            .scaleY(0.9f)
+            .setDuration(500)
+            .start()
+        loserView.setBackgroundColor(Color.parseColor("#424242")) // グレー
+    }
+
     /**
      * 試合終了時の結果ダイアログを表示
      * @param winner 勝利したプレイヤー
